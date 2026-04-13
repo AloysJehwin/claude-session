@@ -289,7 +289,3 @@ Look for `"SessionEnd"` in the `"hooks"` section. If missing, re-run `bash insta
 ### Wrong model alias
 
 Run `claude-session --help` to see available shortcuts. You can always pass full model names with `--model claude-opus-4-6`.
-
-## License
-
-MIT
