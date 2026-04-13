@@ -1,0 +1,402 @@
+#!/usr/bin/env bash
+# claude-session — Claude Code wrapper with persistent session context
+# Usage:
+#   claude-session                        Resume with latest session context (default model)
+#   claude-session --new                  Start a fresh session
+#   claude-session --model opus --new     Fresh session with specific model
+#   claude-session opus                   Resume with opus model (shorthand)
+#   claude-session opus --new             Fresh session with opus (shorthand)
+#   claude-session --list                 List available sessions
+#   claude-session --load <id>            Load a specific session (date or filename)
+#   claude-session --help                 Show this help
+#
+# Model can be specified as:
+#   --model <name>    Full flag (e.g., --model claude-opus-4-6)
+#   <alias>           Shorthand as first arg (opus, sonnet, haiku, best)
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+CLAUDE_BASE_DIR="$HOME/.claude"
+MAX_CONTEXT_CHARS=2000
+
+# Model alias map — shorthand names to full model identifiers
+resolve_model() {
+  local input="$1"
+  case "$input" in
+    opus|o)       echo "claude-opus-4-6" ;;
+    sonnet|s)     echo "claude-sonnet-4-6" ;;
+    haiku|h)      echo "claude-haiku-4-5-20251001" ;;
+    best)         echo "claude-opus-4-6" ;;
+    *)            echo "$input" ;;  # pass through full model names
+  esac
+}
+
+# Check if a string is a known model alias
+is_model_alias() {
+  local input="$1"
+  case "$input" in
+    opus|o|sonnet|s|haiku|h|best) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Mirror Claude Code's project path encoding: /Users/foo/project → -Users-foo-project
+resolve_memory_dir() {
+  local cwd="$1"
+  local encoded
+  encoded=$(echo "$cwd" | sed 's|/|-|g')
+  echo "${CLAUDE_BASE_DIR}/projects/${encoded}/memory"
+}
+
+ensure_sessions_dir() {
+  local mem_dir="$1"
+  local sessions_dir="${mem_dir}/sessions"
+  mkdir -p "$sessions_dir"
+  echo "$sessions_dir"
+}
+
+timestamp() {
+  date "+%Y-%m-%d_%H%M%S"
+}
+
+date_display() {
+  date "+%Y-%m-%d %H:%M:%S"
+}
+
+# Extract a markdown section from a file (## Header through next ## or EOF)
+extract_section() {
+  local file="$1"
+  local section="$2"
+  sed -n "/^## ${section}/,/^## [^${section}]/p" "$file" | sed '$d' 2>/dev/null || true
+}
+
+# Build the context string to inject into the system prompt
+build_context() {
+  local session_file="$1"
+
+  if [[ ! -f "$session_file" ]]; then
+    return
+  fi
+
+  local summary open_next decisions
+  summary=$(extract_section "$session_file" "Summary")
+  decisions=$(extract_section "$session_file" "Decisions")
+  open_next=$(extract_section "$session_file" "Open / Next")
+
+  # Get the session date from filename
+  local basename
+  basename=$(basename "$session_file" .md)
+  local session_date="${basename#session_}"
+
+  local context="[SESSION CONTEXT — Previous session from ${session_date}]
+${summary}
+${decisions}
+${open_next}
+[END SESSION CONTEXT]"
+
+  # Truncate if too long
+  if [[ ${#context} -gt $MAX_CONTEXT_CHARS ]]; then
+    context="${context:0:$MAX_CONTEXT_CHARS}
+...(truncated)
+[END SESSION CONTEXT]"
+  fi
+
+  echo "$context"
+}
+
+# Find the most recent session file
+find_latest_session() {
+  local sessions_dir="$1"
+  # Sort by filename (timestamp-based names sort chronologically)
+  ls -1 "$sessions_dir"/session_*.md 2>/dev/null | sort | tail -1
+}
+
+# Create a new session skeleton file
+create_session_file() {
+  local sessions_dir="$1"
+  local ts
+  ts=$(timestamp)
+  local file="${sessions_dir}/session_${ts}.md"
+  local display_date
+  display_date=$(date_display)
+
+  cat > "$file" << EOF
+---
+name: Session ${ts}
+description: Session started at ${display_date}
+type: project
+---
+
+## Summary
+[New session — in progress]
+
+## Decisions
+[None yet]
+
+## What changed
+[None yet]
+
+## Open / Next
+[To be determined]
+EOF
+
+  echo "$file"
+}
+
+# Update MEMORY.md index with a new session entry
+update_memory_index() {
+  local mem_dir="$1"
+  local session_file="$2"
+  local memory_md="${mem_dir}/MEMORY.md"
+  local basename
+  basename=$(basename "$session_file" .md)
+  local entry="- [${basename}](sessions/${basename}.md) — session log"
+
+  if [[ ! -f "$memory_md" ]]; then
+    cat > "$memory_md" << EOF
+# Memory Index
+
+## Session Logs
+${entry}
+EOF
+    return
+  fi
+
+  # Check if entry already exists
+  if grep -qF "$basename" "$memory_md" 2>/dev/null; then
+    return
+  fi
+
+  # Append under Session Logs section, or at end
+  if grep -q "^## Session Logs" "$memory_md"; then
+    # Insert after the Session Logs header
+    sed -i '' "/^## Session Logs/a\\
+${entry}" "$memory_md" 2>/dev/null || \
+    sed -i "/^## Session Logs/a\\${entry}" "$memory_md" 2>/dev/null || \
+    echo "$entry" >> "$memory_md"
+  else
+    printf "\n## Session Logs\n%s\n" "$entry" >> "$memory_md"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+cmd_help() {
+  cat << 'EOF'
+claude-session — Claude Code with persistent session context
+
+USAGE:
+  claude-session                          Resume with latest session context
+  claude-session --new                    Start a fresh session
+  claude-session --model opus --new       Fresh session with opus model
+  claude-session opus --new               Same thing (shorthand)
+  claude-session --list                   List available session logs
+  claude-session --load <id>              Load a specific session (date or partial match)
+  claude-session --help                   Show this help
+
+MODEL SHORTCUTS:
+  opus, o       → claude-opus-4-6
+  sonnet, s     → claude-sonnet-4-6
+  haiku, h      → claude-haiku-4-5-20251001
+  best          → claude-opus-4-6
+
+  Use as first argument:    claude-session opus --new
+  Or with --model flag:     claude-session --model claude-opus-4-6 --new
+  Or pass full model name:  claude-session --model claude-sonnet-4-6
+
+EXTRA FLAGS:
+  Any unrecognized flags are passed through to claude.
+
+HOW IT WORKS:
+  • Sessions are stored in ~/.claude/projects/<encoded-cwd>/memory/sessions/
+  • On start, the latest session's summary is injected via --append-system-prompt
+  • On exit, a SessionEnd hook auto-captures what changed (requires hook setup)
+  • Use --new to start fresh without loading previous context
+EOF
+}
+
+cmd_list() {
+  local mem_dir
+  mem_dir=$(resolve_memory_dir "$(pwd)")
+  local sessions_dir="${mem_dir}/sessions"
+
+  if [[ ! -d "$sessions_dir" ]] || ! ls "$sessions_dir"/session_*.md &>/dev/null; then
+    echo "No sessions found for $(pwd)"
+    echo "Start one with: claude-session --new"
+    return 0
+  fi
+
+  echo "Sessions for $(pwd):"
+  echo "---"
+  for f in $(ls -1 "$sessions_dir"/session_*.md 2>/dev/null | sort -r); do
+    local name desc
+    name=$(basename "$f" .md)
+    desc=$(grep "^description:" "$f" 2>/dev/null | head -1 | sed 's/^description: *//')
+    printf "  %-28s  %s\n" "${name#session_}" "$desc"
+  done
+  echo "---"
+  echo "Load one with: claude-session --load <date>"
+}
+
+cmd_new() {
+  local model_args=("$@")
+  local mem_dir sessions_dir session_file
+  mem_dir=$(resolve_memory_dir "$(pwd)")
+  sessions_dir=$(ensure_sessions_dir "$mem_dir")
+  session_file=$(create_session_file "$sessions_dir")
+  update_memory_index "$mem_dir" "$session_file"
+
+  echo "Created new session: $(basename "$session_file" .md)"
+  echo "Starting Claude Code (fresh session)..."
+
+  # Export session file path so the end hook knows which file to update
+  export CLAUDE_SESSION_FILE="$session_file"
+  exec claude "${model_args[@]}"
+}
+
+cmd_load() {
+  local pattern="$1"
+  shift
+
+  local mem_dir sessions_dir
+  mem_dir=$(resolve_memory_dir "$(pwd)")
+  sessions_dir="${mem_dir}/sessions"
+
+  if [[ ! -d "$sessions_dir" ]]; then
+    echo "No sessions directory found. Start with: claude-session --new"
+    exit 1
+  fi
+
+  # Find matching session file
+  local match
+  match=$(ls -1 "$sessions_dir"/session_*"${pattern}"*.md 2>/dev/null | sort | tail -1)
+
+  if [[ -z "$match" ]]; then
+    echo "No session matching '$pattern' found."
+    echo "Available sessions:"
+    cmd_list
+    exit 1
+  fi
+
+  local context
+  context=$(build_context "$match")
+  echo "Loading session: $(basename "$match" .md)"
+  echo "Starting Claude Code..."
+
+  export CLAUDE_SESSION_FILE="$match"
+  if [[ -n "$context" ]]; then
+    exec claude --continue --append-system-prompt "$context" "$@"
+  else
+    exec claude --continue "$@"
+  fi
+}
+
+cmd_resume() {
+  local mem_dir sessions_dir latest
+  mem_dir=$(resolve_memory_dir "$(pwd)")
+  sessions_dir=$(ensure_sessions_dir "$mem_dir")
+  latest=$(find_latest_session "$sessions_dir")
+
+  if [[ -z "$latest" ]]; then
+    echo "No previous sessions found. Starting fresh..."
+    cmd_new "$@"
+    return
+  fi
+
+  local context
+  context=$(build_context "$latest")
+  echo "Resuming from: $(basename "$latest" .md)"
+  echo "Starting Claude Code..."
+
+  export CLAUDE_SESSION_FILE="$latest"
+  if [[ -n "$context" ]]; then
+    exec claude --continue --append-system-prompt "$context" "$@"
+  else
+    exec claude --continue "$@"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Main — parse arguments, extract --model / alias, then dispatch
+# ---------------------------------------------------------------------------
+
+main() {
+  local command=""
+  local model=""
+  local load_pattern=""
+  local passthrough=()
+
+  # Parse all arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help|-h)
+        cmd_help
+        return
+        ;;
+      --list|-l)
+        cmd_list
+        return
+        ;;
+      --new|-n)
+        command="new"
+        shift
+        ;;
+      --load)
+        command="load"
+        if [[ -z "${2:-}" ]]; then
+          echo "Error: --load requires a date/pattern argument"
+          echo "Usage: claude-session --load 2026-04-11"
+          exit 1
+        fi
+        load_pattern="$2"
+        shift 2
+        ;;
+      --model|-m)
+        if [[ -z "${2:-}" ]]; then
+          echo "Error: --model requires a model name"
+          echo "Available: opus, sonnet, haiku, best (or full model ID)"
+          exit 1
+        fi
+        model=$(resolve_model "$2")
+        shift 2
+        ;;
+      *)
+        # Check if it's a model alias as a bare first arg
+        if [[ -z "$command" ]] && [[ -z "$model" ]] && is_model_alias "$1"; then
+          model=$(resolve_model "$1")
+          shift
+        else
+          # Pass through unknown flags to claude
+          passthrough+=("$1")
+          shift
+        fi
+        ;;
+    esac
+  done
+
+  # Build model flags if specified
+  if [[ -n "$model" ]]; then
+    passthrough=("--model" "$model" "${passthrough[@]+"${passthrough[@]}"}")
+  fi
+
+  # Dispatch
+  case "${command:-resume}" in
+    new)
+      cmd_new ${passthrough[@]+"${passthrough[@]}"}
+      ;;
+    load)
+      cmd_load "$load_pattern" ${passthrough[@]+"${passthrough[@]}"}
+      ;;
+    resume)
+      cmd_resume ${passthrough[@]+"${passthrough[@]}"}
+      ;;
+  esac
+}
+
+main "$@"
