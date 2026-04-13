@@ -36,15 +36,59 @@ Claude Code starts each conversation fresh. There's no built-in way to carry con
 └──────────────────────┘
 ```
 
-## Install
+## Quick Start
 
 ```bash
+# 1. Clone
 git clone https://github.com/AloysJehwin/claude-session.git
 cd claude-session
+
+# 2. Install
 bash install.sh
+
+# 3. Open a new terminal, then navigate to any project
+cd ~/your-project
+
+# 4. Start your first session
+claude-session --new
+
+# 5. Next time, just run — it picks up where you left off
+claude-session
 ```
 
-Then open a new terminal (to pick up PATH changes).
+## Prerequisites
+
+Make sure you have these installed before running the installer:
+
+| Requirement | Check | Install |
+|-------------|-------|---------|
+| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `claude --version` | `npm install -g @anthropic-ai/claude-code` |
+| bash 3.2+ | `bash --version` | Ships with macOS/Linux |
+| python3 | `python3 --version` | [python.org](https://www.python.org/downloads/) or `brew install python3` |
+| git | `git --version` | [git-scm.com](https://git-scm.com/) (optional, for capturing changes) |
+
+## Install
+
+### Option 1: One-line install
+
+```bash
+git clone https://github.com/AloysJehwin/claude-session.git && cd claude-session && bash install.sh
+```
+
+### Option 2: Step by step
+
+```bash
+# Clone the repo
+git clone https://github.com/AloysJehwin/claude-session.git
+cd claude-session
+
+# Run the installer
+bash install.sh
+
+# Open a NEW terminal tab/window (required to pick up PATH changes)
+# Verify it works
+claude-session --help
+```
 
 ### What the installer does
 
@@ -56,10 +100,69 @@ Then open a new terminal (to pick up PATH changes).
 ### Uninstall
 
 ```bash
+cd claude-session
 bash uninstall.sh
 ```
 
 ## Usage
+
+After install, use `claude-session` instead of `claude` in any project directory.
+
+### Your first session
+
+```bash
+cd ~/my-project
+
+# Start a new session — creates a session log and launches Claude Code
+claude-session --new
+```
+
+Claude Code opens normally. Work as usual. When you exit (`Ctrl+C` or `/exit`), the SessionEnd hook auto-captures your git changes into a session log.
+
+### Resuming next time
+
+```bash
+cd ~/my-project
+
+# Just run it — auto-loads your latest session context
+claude-session
+```
+
+Claude Code starts with your previous session's summary, decisions, and open items injected as context. It knows what you were working on.
+
+### Picking a model
+
+```bash
+# Use shorthand aliases
+claude-session opus --new          # new session with Opus
+claude-session sonnet              # resume with Sonnet
+claude-session h --new             # new session with Haiku
+
+# Or full model names
+claude-session --model claude-opus-4-6 --new
+
+# Or the short flag
+claude-session -m opus --new
+```
+
+### Managing sessions
+
+```bash
+# See all sessions for this project
+claude-session --list
+
+# Output:
+#   Sessions for /Users/you/my-project:
+#   ---
+#     2026-04-13_091500  Session ended at 2026-04-13 10:30:00
+#     2026-04-12_140000  Implemented auth middleware
+#   ---
+
+# Load a specific session by date
+claude-session --load 2026-04-12
+```
+
+### All commands
 
 ```bash
 # Resume with latest session context (default)
@@ -163,12 +266,29 @@ The hook fires automatically when any Claude Code session ends. It:
 - Writes or updates the session log file
 - Updates the `MEMORY.md` index
 
-## Requirements
+## Troubleshooting
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed
-- bash 3.2+ (ships with macOS)
-- python3 (for the SessionEnd hook's JSON parsing)
-- git (optional, for capturing changes)
+### `command not found: claude-session`
+
+Open a **new terminal** after running `install.sh`. The PATH change only takes effect in new shells.
+
+Or run directly: `~/.local/bin/claude-session --help`
+
+### `command not found: claude`
+
+Install Claude Code first: `npm install -g @anthropic-ai/claude-code`
+
+### Sessions not being logged on exit
+
+Check that the hook is configured:
+```bash
+cat ~/.claude/settings.json | python3 -m json.tool
+```
+Look for `"SessionEnd"` in the `"hooks"` section. If missing, re-run `bash install.sh`.
+
+### Wrong model alias
+
+Run `claude-session --help` to see available shortcuts. You can always pass full model names with `--model claude-opus-4-6`.
 
 ## License
 
