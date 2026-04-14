@@ -245,7 +245,6 @@ cmd_list() {
 }
 
 cmd_new() {
-  local model_args=("$@")
   local mem_dir sessions_dir session_file
   mem_dir=$(resolve_memory_dir "$(pwd)")
   sessions_dir=$(ensure_sessions_dir "$mem_dir")
@@ -257,7 +256,7 @@ cmd_new() {
 
   # Export session file path so the end hook knows which file to update
   export CLAUDE_SESSION_FILE="$session_file"
-  exec claude "${model_args[@]}"
+  exec claude ${@+"$@"}
 }
 
 cmd_load() {
@@ -291,9 +290,9 @@ cmd_load() {
 
   export CLAUDE_SESSION_FILE="$match"
   if [[ -n "$context" ]]; then
-    exec claude --continue --append-system-prompt "$context" "$@"
+    exec claude --continue --append-system-prompt "$context" ${@+"$@"}
   else
-    exec claude --continue "$@"
+    exec claude --continue ${@+"$@"}
   fi
 }
 
@@ -305,7 +304,7 @@ cmd_resume() {
 
   if [[ -z "$latest" ]]; then
     echo "No previous sessions found. Starting fresh..."
-    cmd_new "$@"
+    cmd_new ${@+"$@"}
     return
   fi
 
@@ -316,9 +315,9 @@ cmd_resume() {
 
   export CLAUDE_SESSION_FILE="$latest"
   if [[ -n "$context" ]]; then
-    exec claude --continue --append-system-prompt "$context" "$@"
+    exec claude --continue --append-system-prompt "$context" ${@+"$@"}
   else
-    exec claude --continue "$@"
+    exec claude --continue ${@+"$@"}
   fi
 }
 
