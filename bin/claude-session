@@ -71,7 +71,13 @@ date_display() {
 extract_section() {
   local file="$1"
   local section="$2"
-  sed -n "/^## ${section}/,/^## [^${section}]/p" "$file" | sed '$d' 2>/dev/null || true
+  if [[ ! -f "$file" ]]; then return; fi
+  # Use awk for reliable section extraction including the last section
+  awk -v sec="## ${section}" '
+    $0 == sec { found=1; print; next }
+    found && /^## / { exit }
+    found { print }
+  ' "$file" 2>/dev/null || true
 }
 
 # Build the context string to inject into the system prompt
@@ -112,7 +118,7 @@ ${open_next}
 find_latest_session() {
   local sessions_dir="$1"
   # Sort by filename (timestamp-based names sort chronologically)
-  ls -1 "$sessions_dir"/session_*.md 2>/dev/null | sort | tail -1
+  ls -1 "$sessions_dir"/session_*.md 2>/dev/null | sort | tail -1 || true
 }
 
 # Create a new session skeleton file
@@ -172,7 +178,7 @@ EOF
   fi
 
   # Append under Session Logs section, or at end
-  if grep -q "^## Session Logs" "$memory_md"; then
+  if grep -q "^## Session Logs" "$memory_md" 2>/dev/null; then
     # Insert after the Session Logs header
     sed -i '' "/^## Session Logs/a\\
 ${entry}" "$memory_md" 2>/dev/null || \
@@ -226,7 +232,7 @@ cmd_list() {
   mem_dir=$(resolve_memory_dir "$(pwd)")
   local sessions_dir="${mem_dir}/sessions"
 
-  if [[ ! -d "$sessions_dir" ]] || ! ls "$sessions_dir"/session_*.md &>/dev/null; then
+  if [[ ! -d "$sessions_dir" ]] || ! ls "$sessions_dir"/session_*.md &>/dev/null 2>&1; then
     echo "No sessions found for $(pwd)"
     echo "Start one with: claude-session --new"
     return 0
@@ -237,7 +243,7 @@ cmd_list() {
   for f in $(ls -1 "$sessions_dir"/session_*.md 2>/dev/null | sort -r); do
     local name desc
     name=$(basename "$f" .md)
-    desc=$(grep "^description:" "$f" 2>/dev/null | head -1 | sed 's/^description: *//')
+    desc=$(grep "^description:" "$f" 2>/dev/null | head -1 | sed 's/^description: *//' || true)
     printf "  %-28s  %s\n" "${name#session_}" "$desc"
   done
   echo "---"
@@ -274,7 +280,7 @@ cmd_load() {
 
   # Find matching session file
   local match
-  match=$(ls -1 "$sessions_dir"/session_*"${pattern}"*.md 2>/dev/null | sort | tail -1)
+  match=$(ls -1 "$sessions_dir"/session_*"${pattern}"*.md 2>/dev/null | sort | tail -1 || true)
 
   if [[ -z "$match" ]]; then
     echo "No session matching '$pattern' found."
