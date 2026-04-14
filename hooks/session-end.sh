@@ -49,7 +49,7 @@ SESSION_FILE="${CLAUDE_SESSION_FILE:-}"
 if [[ -z "$SESSION_FILE" ]] || [[ ! -f "$SESSION_FILE" ]]; then
   # Find today's most recent session file
   TODAY=$(date "+%Y-%m-%d")
-  SESSION_FILE=$(ls -1 "$SESSIONS_DIR"/session_${TODAY}*.md 2>/dev/null | sort | tail -1)
+  SESSION_FILE=$(ls -1 "$SESSIONS_DIR"/session_${TODAY}*.md 2>/dev/null | sort | tail -1 || true)
 
   # If none found, create one
   if [[ -z "$SESSION_FILE" ]]; then
