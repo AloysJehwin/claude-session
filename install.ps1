@@ -102,13 +102,21 @@ with open(r'$Settings', 'w') as f:
 # 4. Add ~/.local/bin to PATH (user-level)
 $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($currentPath -notlike "*$BinDir*") {
-    [Environment]::SetEnvironmentVariable("Path", "$BinDir;$currentPath", "User")
+    $newUserPath = if ([string]::IsNullOrWhiteSpace($currentPath)) { $BinDir } else { "$BinDir;$currentPath" }
+    [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
     Write-Host "  Added $BinDir to user PATH" -ForegroundColor Green
-    Write-Host "  NOTE: Restart your terminal for PATH changes to take effect" -ForegroundColor Yellow
 } else {
     Write-Host "  $BinDir already on PATH" -ForegroundColor Yellow
 }
 
+# Also update PATH for this current PowerShell session (helps immediate verification
+# when installer is run as .\install.ps1 in the current shell).
+if ($env:Path -notlike "*$BinDir*") {
+    $env:Path = "$BinDir;$env:Path"
+    Write-Host "  Added $BinDir to PATH for this current PowerShell session" -ForegroundColor Green
+}
+
 Write-Host ""
-Write-Host "Done! Open a new terminal, then run:" -ForegroundColor Cyan
+Write-Host "Done! If this install was run in a separate PowerShell process, reopen your terminal app (Windows Terminal / VS Code) once." -ForegroundColor Cyan
+Write-Host "Then run:" -ForegroundColor Cyan
 Write-Host "  claude-session --help" -ForegroundColor White
