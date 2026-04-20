@@ -191,9 +191,9 @@ function Update-MemoryIndex {
     $basename = [System.IO.Path]::GetFileNameWithoutExtension($SessionFile)
     $tag = Extract-Tag -File $SessionFile
     if ($tag) {
-        $entry = "- [$basename](sessions/$basename.md) — $tag"
+        $entry = "- [$basename](sessions/$basename.md) -- $tag"
     } else {
-        $entry = "- [$basename](sessions/$basename.md) — session log"
+        $entry = "- [$basename](sessions/$basename.md) -- session log"
     }
 
     if (-not (Test-Path $memoryMd)) {
