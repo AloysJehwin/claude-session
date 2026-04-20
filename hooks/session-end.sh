@@ -17,6 +17,7 @@ INPUT=$(cat)
 
 CWD=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null || echo "")
 SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || echo "")
+TRANSCRIPT_PATH=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('transcript_path',''))" 2>/dev/null || echo "")
 
 # Fallback: if cwd not in input, use the env var or current dir
 if [[ -z "$CWD" ]]; then
@@ -38,6 +39,44 @@ if [[ ! -d "$MEM_DIR" ]]; then
 fi
 
 mkdir -p "$SESSIONS_DIR"
+
+# ---------------------------------------------------------------------------
+# Extract a topic tag from the first user message in the transcript
+# ---------------------------------------------------------------------------
+
+SESSION_TAG=""
+if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
+  SESSION_TAG=$(python3 -c "
+import json, sys
+try:
+    with open('$TRANSCRIPT_PATH', 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            if obj.get('type') != 'user':
+                continue
+            msg = obj.get('message', {})
+            content = msg.get('content', '')
+            text = ''
+            if isinstance(content, list):
+                for c in content:
+                    if c.get('type') == 'text':
+                        text = c['text']
+                        break
+            elif isinstance(content, str):
+                text = content
+            if text:
+                text = ' '.join(text.split())
+                if len(text) > 50:
+                    text = text[:50].rsplit(' ', 1)[0]
+                print(text.lower())
+            break
+except Exception:
+    pass
+" 2>/dev/null || true)
+fi
 
 # ---------------------------------------------------------------------------
 # Determine which session file to update
@@ -126,18 +165,49 @@ content = re.sub(
     content
 )
 
+# Add session_id to frontmatter if not already present
+session_id = '''$SESSION_ID'''
+if session_id and 'session_id:' not in content:
+    content = content.replace('type: project', 'type: project\nsession_id: ' + session_id, 1)
+
+# Add tag to frontmatter if not already present
+tag = '''$SESSION_TAG'''
+if tag and 'tag:' not in content:
+    content = content.replace('type: project', 'type: project\ntag: ' + tag, 1)
+
+# Update name to include tag
+if tag:
+    content = re.sub(
+        r'name: Session (\S+)',
+        r'name: Session \1 — ' + tag,
+        content
+    )
+
 with open('$SESSION_FILE', 'w') as f:
     f.write(content)
 " 2>/dev/null || true
   fi
 else
   # Create new session file
+  # Build name with optional tag
+  SESSION_NAME="${TS_NAME}"
+  if [[ -n "$SESSION_TAG" ]]; then
+    SESSION_NAME="${TS_NAME} — ${SESSION_TAG}"
+  fi
+
+  # Build frontmatter lines
+  FM_EXTRA=""
+  if [[ -n "$SESSION_ID" ]]; then FM_EXTRA="${FM_EXTRA}session_id: ${SESSION_ID}
+"; fi
+  if [[ -n "$SESSION_TAG" ]]; then FM_EXTRA="${FM_EXTRA}tag: ${SESSION_TAG}
+"; fi
+
   cat > "$SESSION_FILE" << ENDOFFILE
 ---
-name: ${TS_NAME}
+name: ${SESSION_NAME}
 description: Session ended at ${DISPLAY_DATE}
 type: project
----
+${FM_EXTRA}---
 
 ## Summary
 [Session summary pending — to be filled in next session]
@@ -168,7 +238,11 @@ ENDOFFILE
 
   # Update MEMORY.md index
   if [[ -f "$MEMORY_MD" ]]; then
-    ENTRY="- [${TS_NAME}](sessions/${TS_NAME}.md) — session log"
+    if [[ -n "$SESSION_TAG" ]]; then
+      ENTRY="- [${TS_NAME}](sessions/${TS_NAME}.md) — ${SESSION_TAG}"
+    else
+      ENTRY="- [${TS_NAME}](sessions/${TS_NAME}.md) — session log"
+    fi
     if ! grep -qF "$TS_NAME" "$MEMORY_MD" 2>/dev/null; then
       if grep -q "^## Session Logs" "$MEMORY_MD"; then
         # macOS sed

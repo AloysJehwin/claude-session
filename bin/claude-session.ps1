@@ -103,6 +103,22 @@ function Extract-Section {
     return ""
 }
 
+function Extract-SessionId {
+    param([string]$File)
+    if (-not (Test-Path $File)) { return "" }
+    $match = Select-String -Path $File -Pattern "^session_id:" | Select-Object -First 1
+    if ($match) { return ($match.Line -replace "^session_id:\s*", "") }
+    return ""
+}
+
+function Extract-Tag {
+    param([string]$File)
+    if (-not (Test-Path $File)) { return "" }
+    $match = Select-String -Path $File -Pattern "^tag:" | Select-Object -First 1
+    if ($match) { return ($match.Line -replace "^tag:\s*", "") }
+    return ""
+}
+
 function Build-Context {
     param([string]$SessionFile)
     if (-not (Test-Path $SessionFile)) { return "" }
@@ -173,7 +189,12 @@ function Update-MemoryIndex {
     param([string]$MemDir, [string]$SessionFile)
     $memoryMd = Join-Path $MemDir "MEMORY.md"
     $basename = [System.IO.Path]::GetFileNameWithoutExtension($SessionFile)
-    $entry = "- [$basename](sessions/$basename.md) - session log"
+    $tag = Extract-Tag -File $SessionFile
+    if ($tag) {
+        $entry = "- [$basename](sessions/$basename.md) — $tag"
+    } else {
+        $entry = "- [$basename](sessions/$basename.md) — session log"
+    }
 
     if (-not (Test-Path $memoryMd)) {
         $content = @"
@@ -258,10 +279,16 @@ function Show-List {
     Write-Host "---"
     foreach ($f in $files) {
         $name = $f.BaseName -replace "^session_", ""
+        $tag = Extract-Tag -File $f.FullName
         $desc = ""
         $match = Select-String -Path $f.FullName -Pattern "^description:" | Select-Object -First 1
         if ($match) { $desc = ($match.Line -replace "^description:\s*", "") }
-        Write-Host ("  {0,-28}  {1}" -f $name, $desc)
+        if ($tag) {
+            $display = "$name  [$tag]"
+        } else {
+            $display = $name
+        }
+        Write-Host ("  {0,-45}  {1}" -f $display, $desc)
     }
     Write-Host "---"
     Write-Host "Load one with: claude-session -load <date>"
@@ -302,12 +329,17 @@ function Start-LoadSession {
     }
 
     $context = Build-Context -SessionFile $match.FullName
+    $sid = Extract-SessionId -File $match.FullName
     $basename = $match.BaseName
     Write-Host "Loading session: $basename"
     Write-Host "Starting Claude Code..."
 
     $env:CLAUDE_SESSION_FILE = $match.FullName
-    $args = @("--continue")
+    if ($sid) {
+        $args = @("--resume", $sid)
+    } else {
+        $args = @("--continue")
+    }
     if ($context) { $args += "--append-system-prompt"; $args += $context }
     $args += $ExtraArgs
     & claude @args
