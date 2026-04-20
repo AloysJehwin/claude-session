@@ -60,9 +60,11 @@ claude-session             # next time — picks up where you left off
 ```powershell
 git clone https://github.com/AloysJehwin/claude-session.git
 cd claude-session
-powershell -ExecutionPolicy Bypass -File install.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\install.ps1
 
-# Open a new terminal, then:
+# If your terminal app was already open for a long time (Windows Terminal / VS Code),
+# reopen it once to pick up user PATH updates, then:
 cd C:\Users\you\your-project
 claude-session --new       # first time
 claude-session             # next time — picks up where you left off
@@ -119,7 +121,7 @@ claude-session --help
 **One-line install (PowerShell):**
 
 ```powershell
-git clone https://github.com/AloysJehwin/claude-session.git; cd claude-session; powershell -ExecutionPolicy Bypass -File install.ps1
+git clone https://github.com/AloysJehwin/claude-session.git; cd claude-session; Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\install.ps1
 ```
 
 **Step by step:**
@@ -130,9 +132,11 @@ git clone https://github.com/AloysJehwin/claude-session.git
 cd claude-session
 
 # Run the installer
-powershell -ExecutionPolicy Bypass -File install.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\install.ps1
 
-# Open a NEW terminal window (required to pick up PATH changes)
+# If your terminal app was already open for a long time (Windows Terminal / VS Code),
+# reopen it once to pick up user PATH changes.
 # Verify it works
 claude-session --help
 ```
@@ -397,7 +401,8 @@ Look for `"SessionEnd"` in the `"hooks"` section. If missing, re-run the install
 
 Run the installer with the bypass flag:
 ```powershell
-powershell -ExecutionPolicy Bypass -File install.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\install.ps1
 ```
 
 Or enable script execution for your user:
