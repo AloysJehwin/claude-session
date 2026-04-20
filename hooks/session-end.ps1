@@ -154,7 +154,7 @@ if (Test-Path $sessionFile) {
 
         # Update name to include tag
         if ($sessionTag) {
-            $content = $content -replace 'name: Session (\S+)', "name: Session `$1 — $sessionTag"
+            $content = $content -replace 'name: Session (\S+)', "name: Session `$1 -- $sessionTag"
         }
 
         Set-Content -Path $sessionFile -Value $content -Encoding UTF8
@@ -173,7 +173,7 @@ if (Test-Path $sessionFile) {
     }
 
     $sessionName = $tsName
-    if ($sessionTag) { $sessionName = "$tsName — $sessionTag" }
+    if ($sessionTag) { $sessionName = "$tsName -- $sessionTag" }
 
     $fmExtra = ""
     if ($sessionId) { $fmExtra += "session_id: $sessionId`n" }
@@ -204,9 +204,9 @@ $gitSection
     # Update MEMORY.md index
     if (Test-Path $memoryMd) {
         if ($sessionTag) {
-            $entry = "- [$tsName](sessions/$tsName.md) — $sessionTag"
+            $entry = "- [$tsName](sessions/$tsName.md) -- $sessionTag"
         } else {
-            $entry = "- [$tsName](sessions/$tsName.md) — session log"
+            $entry = "- [$tsName](sessions/$tsName.md) -- session log"
         }
         $memContent = Get-Content $memoryMd -Raw
         if ($memContent -notmatch [regex]::Escape($tsName)) {
