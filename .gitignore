@@ -2,3 +2,7 @@
 *.swp
 *.swo
 *~
+
+# Go build artifacts
+bridge/claude-relay
+bridge/claude-relay-*
