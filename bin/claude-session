@@ -80,6 +80,20 @@ extract_section() {
   ' "$file" 2>/dev/null || true
 }
 
+# Extract session_id from a session file's frontmatter
+extract_session_id() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then return; fi
+  grep "^session_id:" "$file" 2>/dev/null | head -1 | sed 's/^session_id: *//' || true
+}
+
+# Extract tag from a session file's frontmatter
+extract_tag() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then return; fi
+  grep "^tag:" "$file" 2>/dev/null | head -1 | sed 's/^tag: *//' || true
+}
+
 # Build the context string to inject into the system prompt
 build_context() {
   local session_file="$1"
@@ -158,9 +172,14 @@ update_memory_index() {
   local mem_dir="$1"
   local session_file="$2"
   local memory_md="${mem_dir}/MEMORY.md"
-  local basename
+  local basename tag entry
   basename=$(basename "$session_file" .md)
-  local entry="- [${basename}](sessions/${basename}.md) — session log"
+  tag=$(extract_tag "$session_file")
+  if [[ -n "$tag" ]]; then
+    entry="- [${basename}](sessions/${basename}.md) — ${tag}"
+  else
+    entry="- [${basename}](sessions/${basename}.md) — session log"
+  fi
 
   if [[ ! -f "$memory_md" ]]; then
     cat > "$memory_md" << EOF
@@ -241,10 +260,16 @@ cmd_list() {
   echo "Sessions for $(pwd):"
   echo "---"
   for f in $(ls -1 "$sessions_dir"/session_*.md 2>/dev/null | sort -r); do
-    local name desc
+    local name tag desc display
     name=$(basename "$f" .md)
+    tag=$(extract_tag "$f")
     desc=$(grep "^description:" "$f" 2>/dev/null | head -1 | sed 's/^description: *//' || true)
-    printf "  %-28s  %s\n" "${name#session_}" "$desc"
+    if [[ -n "$tag" ]]; then
+      display="${name#session_}  [${tag}]"
+    else
+      display="${name#session_}"
+    fi
+    printf "  %-45s  %s\n" "$display" "$desc"
   done
   echo "---"
   echo "Load one with: claude-session --load <date>"
@@ -289,16 +314,25 @@ cmd_load() {
     exit 1
   fi
 
-  local context
+  local context sid
   context=$(build_context "$match")
+  sid=$(extract_session_id "$match")
   echo "Loading session: $(basename "$match" .md)"
   echo "Starting Claude Code..."
 
   export CLAUDE_SESSION_FILE="$match"
-  if [[ -n "$context" ]]; then
-    exec claude --continue --append-system-prompt "$context" ${@+"$@"}
+  if [[ -n "$sid" ]]; then
+    if [[ -n "$context" ]]; then
+      exec claude --resume "$sid" --append-system-prompt "$context" ${@+"$@"}
+    else
+      exec claude --resume "$sid" ${@+"$@"}
+    fi
   else
-    exec claude --continue ${@+"$@"}
+    if [[ -n "$context" ]]; then
+      exec claude --continue --append-system-prompt "$context" ${@+"$@"}
+    else
+      exec claude --continue ${@+"$@"}
+    fi
   fi
 }
 

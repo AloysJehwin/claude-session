@@ -17,6 +17,8 @@ try {
 } catch {}
 
 $cwd = $data.cwd
+$sessionId = $data.session_id
+$transcriptPath = $data.transcript_path
 if (-not $cwd) { $cwd = $env:CLAUDE_PROJECT_DIR }
 if (-not $cwd) { $cwd = Get-Location }
 
@@ -34,6 +36,47 @@ if (-not (Test-Path $memDir)) { exit 0 }
 
 if (-not (Test-Path $sessionsDir)) {
     New-Item -ItemType Directory -Path $sessionsDir -Force | Out-Null
+}
+
+# ---------------------------------------------------------------------------
+# Extract a topic tag from the first user message in the transcript
+# ---------------------------------------------------------------------------
+
+$sessionTag = ""
+if ($transcriptPath -and (Test-Path $transcriptPath)) {
+    try {
+        $tagScript = @"
+import json, sys
+try:
+    with open(sys.argv[1], 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            if obj.get('type') != 'user':
+                continue
+            msg = obj.get('message', {})
+            content = msg.get('content', '')
+            text = ''
+            if isinstance(content, list):
+                for c in content:
+                    if c.get('type') == 'text':
+                        text = c['text']
+                        break
+            elif isinstance(content, str):
+                text = content
+            if text:
+                text = ' '.join(text.split())
+                if len(text) > 50:
+                    text = text[:50].rsplit(' ', 1)[0]
+                print(text.lower())
+            break
+except Exception:
+    pass
+"@
+        $sessionTag = ($tagScript | python3 - $transcriptPath 2>$null).Trim()
+    } catch {}
 }
 
 # ---------------------------------------------------------------------------
@@ -99,6 +142,21 @@ if (Test-Path $sessionFile) {
         # Update description
         $content = $content -replace 'description: Session started at .*', "description: Session ended at $displayDate"
 
+        # Add session_id to frontmatter if not already present
+        if ($sessionId -and $content -notmatch 'session_id:') {
+            $content = $content -replace '(type: project)', "`$1`nsession_id: $sessionId"
+        }
+
+        # Add tag to frontmatter if not already present
+        if ($sessionTag -and $content -notmatch 'tag:') {
+            $content = $content -replace '(type: project)', "`$1`ntag: $sessionTag"
+        }
+
+        # Update name to include tag
+        if ($sessionTag) {
+            $content = $content -replace 'name: Session (\S+)', "name: Session `$1 — $sessionTag"
+        }
+
         Set-Content -Path $sessionFile -Value $content -Encoding UTF8
     }
 } else {
@@ -114,12 +172,19 @@ if (Test-Path $sessionFile) {
         $gitSection = "No git changes detected."
     }
 
+    $sessionName = $tsName
+    if ($sessionTag) { $sessionName = "$tsName — $sessionTag" }
+
+    $fmExtra = ""
+    if ($sessionId) { $fmExtra += "session_id: $sessionId`n" }
+    if ($sessionTag) { $fmExtra += "tag: $sessionTag`n" }
+
     $newContent = @"
 ---
-name: $tsName
+name: $sessionName
 description: Session ended at $displayDate
 type: project
----
+${fmExtra}---
 
 ## Summary
 [Session summary pending - to be filled in next session]
@@ -138,7 +203,11 @@ $gitSection
 
     # Update MEMORY.md index
     if (Test-Path $memoryMd) {
-        $entry = "- [$tsName](sessions/$tsName.md) - session log"
+        if ($sessionTag) {
+            $entry = "- [$tsName](sessions/$tsName.md) — $sessionTag"
+        } else {
+            $entry = "- [$tsName](sessions/$tsName.md) — session log"
+        }
         $memContent = Get-Content $memoryMd -Raw
         if ($memContent -notmatch [regex]::Escape($tsName)) {
             if ($memContent -match "## Session Logs") {
