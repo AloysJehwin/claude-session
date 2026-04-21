@@ -6,7 +6,9 @@
 #   claude-session opus --new             Fresh session with opus (shorthand)
 #   claude-session --list                 List available sessions
 #   claude-session --load <id>            Load a specific session
+#   claude-session --delete <id>          Delete a specific session
 #   claude-session --help                 Show this help
+#   claude-session --version              Show version
 
 param(
     [switch]$new,
@@ -19,12 +21,19 @@ param(
 
     [string]$load,
 
+    [Alias("d")]
+    [string]$delete,
+
     [Alias("m")]
     [string]$model,
 
     [switch]$help,
     [Alias("h")]
     [switch]$ShowHelp,
+
+    [switch]$version,
+    [Alias("V")]
+    [switch]$ShowVersion,
 
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Remaining
@@ -38,6 +47,7 @@ $ErrorActionPreference = "Stop"
 
 $CLAUDE_BASE_DIR = Join-Path $env:USERPROFILE ".claude"
 $MAX_CONTEXT_CHARS = 2000
+$CLAUDE_SESSION_VERSION = "1.0.0"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -233,7 +243,9 @@ USAGE:
   claude-session opus -new                Same thing (shorthand)
   claude-session -list                    List available session logs
   claude-session -load <id>              Load a specific session (date or partial match)
+  claude-session -delete <id>            Delete a specific session (date or partial match)
   claude-session -help                    Show this help
+  claude-session -version                 Show version
 
 MODEL SHORTCUTS:
   opus, o       -> claude-opus-4-6
@@ -345,6 +357,53 @@ function Start-LoadSession {
     & claude @args
 }
 
+function Remove-SessionFile {
+    param([string]$Pattern)
+    $memDir = Resolve-MemoryDir -Cwd (Get-Location).Path
+    $sessionsDir = Join-Path $memDir "sessions"
+
+    if (-not (Test-Path $sessionsDir)) {
+        Write-Host "No sessions directory found."
+        exit 1
+    }
+
+    $match = Get-ChildItem -Path $sessionsDir -Filter "session_*${Pattern}*.md" -ErrorAction SilentlyContinue |
+             Sort-Object Name | Select-Object -Last 1
+
+    if (-not $match) {
+        Write-Host "No session matching '$Pattern' found."
+        Show-List
+        exit 1
+    }
+
+    $basename = $match.BaseName
+    $tag = Extract-Tag -File $match.FullName
+    if ($tag) {
+        $display = "$($basename -replace '^session_', '')  [$tag]"
+    } else {
+        $display = $basename -replace "^session_", ""
+    }
+
+    Write-Host "Delete session: $display"
+    $confirm = Read-Host "Are you sure? [y/N]"
+    if ($confirm -ne "y" -and $confirm -ne "Y") {
+        Write-Host "Cancelled."
+        return
+    }
+
+    Remove-Item -Path $match.FullName -Force
+    Write-Host "Deleted: $($match.FullName)"
+
+    $memoryMd = Join-Path $memDir "MEMORY.md"
+    if (Test-Path $memoryMd) {
+        $content = Get-Content $memoryMd
+        $filtered = $content | Where-Object { $_ -notmatch [regex]::Escape($basename) }
+        Set-Content -Path $memoryMd -Value $filtered -Encoding UTF8
+    }
+
+    Write-Host "Session removed."
+}
+
 function Start-ResumeSession {
     param([string[]]$ExtraArgs)
     $memDir = Resolve-MemoryDir -Cwd (Get-Location).Path
@@ -358,12 +417,17 @@ function Start-ResumeSession {
     }
 
     $context = Build-Context -SessionFile $latest
+    $sid = Extract-SessionId -File $latest
     $basename = [System.IO.Path]::GetFileNameWithoutExtension($latest)
     Write-Host "Resuming from: $basename"
     Write-Host "Starting Claude Code..."
 
     $env:CLAUDE_SESSION_FILE = $latest
-    $args = @("--continue")
+    if ($sid) {
+        $args = @("--resume", $sid)
+    } else {
+        $args = @("--continue")
+    }
     if ($context) { $args += "--append-system-prompt"; $args += $context }
     $args += $ExtraArgs
     & claude @args
@@ -394,12 +458,16 @@ if ($Remaining) { $passthrough += $Remaining }
 # Dispatch
 if ($help -or $ShowHelp) {
     Show-Help
+} elseif ($version -or $ShowVersion) {
+    Write-Host "claude-session $CLAUDE_SESSION_VERSION"
 } elseif ($list -or $ListSessions) {
     Show-List
 } elseif ($new -or $NewSession) {
     Start-NewSession -ExtraArgs $passthrough
 } elseif ($load) {
     Start-LoadSession -Pattern $load -ExtraArgs $passthrough
+} elseif ($delete) {
+    Remove-SessionFile -Pattern $delete
 } else {
     Start-ResumeSession -ExtraArgs $passthrough
 }
