@@ -44,12 +44,16 @@ func main() {
 
 	case "connect":
 		if len(args) < 1 {
-			fatal("Usage: claude-relay connect user@host [port]")
+			fatal("Usage: claude-relay connect user@host [--port PORT]")
 		}
 		target := args[0]
 		port := 2222
-		if len(args) > 1 {
-			port, _ = strconv.Atoi(args[1])
+		for i, a := range args[1:] {
+			if a == "--port" && i+2 < len(args) {
+				port, _ = strconv.Atoi(args[i+2])
+			} else if p, e := strconv.Atoi(a); e == nil && p > 0 {
+				port = p
+			}
 		}
 		err = cmd.Connect(target, port)
 
