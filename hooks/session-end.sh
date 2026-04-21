@@ -79,6 +79,43 @@ except Exception:
 fi
 
 # ---------------------------------------------------------------------------
+# If the session had no user messages, clean up the empty session file
+# ---------------------------------------------------------------------------
+
+HAS_USER_MSG=""
+if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
+  HAS_USER_MSG=$(python3 -c "
+import json
+try:
+    with open('$TRANSCRIPT_PATH', 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            if obj.get('type') == 'user':
+                print('yes')
+                break
+except Exception:
+    pass
+" 2>/dev/null || true)
+fi
+
+if [[ -z "$HAS_USER_MSG" ]]; then
+  SESSION_FILE="${CLAUDE_SESSION_FILE:-}"
+  if [[ -n "$SESSION_FILE" ]] && [[ -f "$SESSION_FILE" ]]; then
+    BASENAME=$(basename "$SESSION_FILE" .md)
+    rm -f "$SESSION_FILE"
+    if [[ -f "$MEMORY_MD" ]]; then
+      grep -vF "$BASENAME" "$MEMORY_MD" > "${MEMORY_MD}.tmp" 2>/dev/null && \
+        mv "${MEMORY_MD}.tmp" "$MEMORY_MD" || \
+        rm -f "${MEMORY_MD}.tmp"
+    fi
+  fi
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # Determine which session file to update
 # ---------------------------------------------------------------------------
 
