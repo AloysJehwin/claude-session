@@ -6,6 +6,7 @@
 #   claude-session opus --new             Fresh session with opus (shorthand)
 #   claude-session --list                 List available sessions
 #   claude-session --load <id>            Load a specific session
+#   claude-session --delete <id>          Delete a specific session
 #   claude-session --help                 Show this help
 #   claude-session --version              Show version
 
@@ -19,6 +20,9 @@ param(
     [switch]$ListSessions,
 
     [string]$load,
+
+    [Alias("d")]
+    [string]$delete,
 
     [Alias("m")]
     [string]$model,
@@ -239,6 +243,7 @@ USAGE:
   claude-session opus -new                Same thing (shorthand)
   claude-session -list                    List available session logs
   claude-session -load <id>              Load a specific session (date or partial match)
+  claude-session -delete <id>            Delete a specific session (date or partial match)
   claude-session -help                    Show this help
   claude-session -version                 Show version
 
@@ -352,6 +357,53 @@ function Start-LoadSession {
     & claude @args
 }
 
+function Remove-SessionFile {
+    param([string]$Pattern)
+    $memDir = Resolve-MemoryDir -Cwd (Get-Location).Path
+    $sessionsDir = Join-Path $memDir "sessions"
+
+    if (-not (Test-Path $sessionsDir)) {
+        Write-Host "No sessions directory found."
+        exit 1
+    }
+
+    $match = Get-ChildItem -Path $sessionsDir -Filter "session_*${Pattern}*.md" -ErrorAction SilentlyContinue |
+             Sort-Object Name | Select-Object -Last 1
+
+    if (-not $match) {
+        Write-Host "No session matching '$Pattern' found."
+        Show-List
+        exit 1
+    }
+
+    $basename = $match.BaseName
+    $tag = Extract-Tag -File $match.FullName
+    if ($tag) {
+        $display = "$($basename -replace '^session_', '')  [$tag]"
+    } else {
+        $display = $basename -replace "^session_", ""
+    }
+
+    Write-Host "Delete session: $display"
+    $confirm = Read-Host "Are you sure? [y/N]"
+    if ($confirm -ne "y" -and $confirm -ne "Y") {
+        Write-Host "Cancelled."
+        return
+    }
+
+    Remove-Item -Path $match.FullName -Force
+    Write-Host "Deleted: $($match.FullName)"
+
+    $memoryMd = Join-Path $memDir "MEMORY.md"
+    if (Test-Path $memoryMd) {
+        $content = Get-Content $memoryMd
+        $filtered = $content | Where-Object { $_ -notmatch [regex]::Escape($basename) }
+        Set-Content -Path $memoryMd -Value $filtered -Encoding UTF8
+    }
+
+    Write-Host "Session removed."
+}
+
 function Start-ResumeSession {
     param([string[]]$ExtraArgs)
     $memDir = Resolve-MemoryDir -Cwd (Get-Location).Path
@@ -414,6 +466,8 @@ if ($help -or $ShowHelp) {
     Start-NewSession -ExtraArgs $passthrough
 } elseif ($load) {
     Start-LoadSession -Pattern $load -ExtraArgs $passthrough
+} elseif ($delete) {
+    Remove-SessionFile -Pattern $delete
 } else {
     Start-ResumeSession -ExtraArgs $passthrough
 }

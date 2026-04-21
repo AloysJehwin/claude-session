@@ -8,6 +8,7 @@
 #   claude-session opus --new             Fresh session with opus (shorthand)
 #   claude-session --list                 List available sessions
 #   claude-session --load <id>            Load a specific session (date or filename)
+#   claude-session --delete <id>          Delete a specific session (date or filename)
 #   claude-session --help                 Show this help
 #   claude-session --version              Show version
 #
@@ -225,6 +226,7 @@ USAGE:
   claude-session opus --new               Same thing (shorthand)
   claude-session --list                   List available session logs
   claude-session --load <id>              Load a specific session (date or partial match)
+  claude-session --delete <id>            Delete a specific session (date or partial match)
   claude-session --help                   Show this help
   claude-session --version                Show version
 
@@ -339,6 +341,58 @@ cmd_load() {
   fi
 }
 
+cmd_delete() {
+  local pattern="$1"
+
+  local mem_dir sessions_dir
+  mem_dir=$(resolve_memory_dir "$(pwd)")
+  sessions_dir="${mem_dir}/sessions"
+
+  if [[ ! -d "$sessions_dir" ]]; then
+    echo "No sessions directory found."
+    exit 1
+  fi
+
+  local match
+  match=$(ls -1 "$sessions_dir"/session_*"${pattern}"*.md 2>/dev/null | sort | tail -1 || true)
+
+  if [[ -z "$match" ]]; then
+    echo "No session matching '$pattern' found."
+    echo "Available sessions:"
+    cmd_list
+    exit 1
+  fi
+
+  local basename tag display
+  basename=$(basename "$match" .md)
+  tag=$(extract_tag "$match")
+  if [[ -n "$tag" ]]; then
+    display="${basename#session_}  [${tag}]"
+  else
+    display="${basename#session_}"
+  fi
+
+  printf "Delete session: %s\n" "$display"
+  printf "Are you sure? [y/N] "
+  read -r confirm
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "Cancelled."
+    return
+  fi
+
+  rm -f "$match"
+  echo "Deleted: $match"
+
+  local memory_md="${mem_dir}/MEMORY.md"
+  if [[ -f "$memory_md" ]]; then
+    grep -vF "$basename" "$memory_md" > "${memory_md}.tmp" 2>/dev/null && \
+      mv "${memory_md}.tmp" "$memory_md" || \
+      rm -f "${memory_md}.tmp"
+  fi
+
+  echo "Session removed."
+}
+
 cmd_resume() {
   local mem_dir sessions_dir latest
   mem_dir=$(resolve_memory_dir "$(pwd)")
@@ -412,6 +466,16 @@ main() {
         load_pattern="$2"
         shift 2
         ;;
+      --delete|-d)
+        command="delete"
+        if [[ -z "${2:-}" ]]; then
+          echo "Error: --delete requires a date/pattern argument"
+          echo "Usage: claude-session --delete 2026-04-11"
+          exit 1
+        fi
+        load_pattern="$2"
+        shift 2
+        ;;
       --model|-m)
         if [[ -z "${2:-}" ]]; then
           echo "Error: --model requires a model name"
@@ -447,6 +511,9 @@ main() {
       ;;
     load)
       cmd_load "$load_pattern" ${passthrough[@]+"${passthrough[@]}"}
+      ;;
+    delete)
+      cmd_delete "$load_pattern"
       ;;
     resume)
       cmd_resume ${passthrough[@]+"${passthrough[@]}"}
