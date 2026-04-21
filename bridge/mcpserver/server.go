@@ -123,8 +123,12 @@ func (s *MCPServer) handleToolsCall(req *JSONRPCRequest) {
 }
 
 func (s *MCPServer) ensureConnected() {
-	if s.wsClient != nil {
+	if s.wsClient != nil && s.wsClient.IsAlive() {
 		return
+	}
+	if s.wsClient != nil {
+		s.wsClient.Close()
+		s.wsClient = nil
 	}
 	if s.serverURL == "" {
 		return

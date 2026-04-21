@@ -82,6 +82,15 @@ func (c *Client) IsPaired() bool {
 	return c.peerID != ""
 }
 
+func (c *Client) IsAlive() bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+		return true
+	}
+}
+
 func (c *Client) OnMessage(handler func(*relay.Message)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

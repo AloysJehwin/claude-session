@@ -43,7 +43,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
+	ctx := context.Background()
 
 	_, data, err := conn.Read(ctx)
 	if err != nil {
