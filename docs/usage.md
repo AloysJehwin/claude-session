@@ -53,6 +53,9 @@ claude-session --list
 
 # Load a specific session by date — resumes the exact conversation
 claude-session --load 2026-04-12
+
+# Delete a session by date
+claude-session --delete 2026-04-12
 ```
 
 ## All commands
@@ -64,7 +67,9 @@ claude-session opus --new          # fresh session with specific model
 claude-session --model sonnet      # resume with specific model
 claude-session --list              # list all sessions
 claude-session --load 2026-04-11   # load specific session
+claude-session --delete 2026-04-11 # delete a session
 claude-session --help              # show help
+claude-session --version           # show version
 ```
 
 ## Model shortcuts
@@ -83,7 +88,9 @@ claude-session --help              # show help
 | `--new` | `-n` | Start a fresh session (no context loaded) |
 | `--list` | `-l` | List all sessions for the current directory |
 | `--load <date>` | | Load a specific session by date or partial match |
+| `--delete <date>` | `-d` | Delete a session by date or partial match (with confirmation) |
 | `--model <name>` | `-m` | Set the model (alias or full name) |
 | `--help` | `-h` | Show help |
+| `--version` | `-V` | Show version |
 
 Any other flags are passed through to `claude` directly.
