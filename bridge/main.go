@@ -7,13 +7,17 @@ import (
 	"strings"
 
 	"github.com/AloysJehwin/claude-session/bridge/cmd"
+	"github.com/AloysJehwin/claude-session/bridge/mcpserver"
+	"github.com/AloysJehwin/claude-session/bridge/wsrelay"
 )
 
 const usage = `claude-relay — cross-machine Claude Code session bridge
 
 USAGE:
-  claude-relay listen [--port PORT]       Start relay listener (default port: 2222)
-  claude-relay connect USER@HOST [PORT]   Connect to a remote relay listener
+  claude-relay server [--addr HOST:PORT]  Start WebSocket relay server (default: localhost:7778)
+  claude-relay mcp                        Start MCP server (stdio, for Claude Code)
+  claude-relay listen [--port PORT]       Start SSH relay listener (legacy, default: 2222)
+  claude-relay connect USER@HOST [PORT]   SSH-connect to remote (legacy)
   claude-relay send MESSAGE               Send a message to the connected peer
   claude-relay inbox                      List unread messages
   claude-relay read                       Read the oldest unread message
@@ -33,6 +37,28 @@ func main() {
 
 	var err error
 	switch subcmd {
+	case "server":
+		addr := "localhost:7778"
+		for i, a := range args {
+			if a == "--addr" && i+1 < len(args) {
+				addr = args[i+1]
+			}
+		}
+		srv := wsrelay.NewServer(addr)
+		err = srv.Start()
+
+	case "mcp":
+		sessionID := os.Getenv("CLAUDE_SESSION_ID")
+		if sessionID == "" {
+			sessionID = "unknown"
+		}
+		serverURL := os.Getenv("RELAY_SERVER_URL")
+		if serverURL == "" {
+			serverURL = "http://localhost:7778"
+		}
+		srv := mcpserver.New(sessionID, serverURL)
+		err = srv.Run()
+
 	case "listen":
 		port := 2222
 		for i, a := range args {

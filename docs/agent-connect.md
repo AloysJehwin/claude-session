@@ -1,132 +1,153 @@
 # Agent Connect
 
-Connect two Claude Code sessions on different machines for real-time, inline communication via SSH.
+Connect two Claude Code sessions for real-time messaging. Sessions pair by session ID and communicate through a central WebSocket relay server.
 
 ## How it works
 
-One machine starts a relay listener, the other connects. Messages flow over an SSH tunnel and appear inline in both Claude Code sessions — like a group chat between two agents.
+```
+┌─────────────────────────────────────────────────┐
+│  WebSocket Relay Server  (claude-relay server)   │
+│  Runs on localhost:7778                          │
+└────────────┬────────────────────┬────────────────┘
+             │ ws://              │ ws://
+    ┌────────▼────────┐  ┌───────▼─────────┐
+    │ Claude Code (A) │  │ Claude Code (B) │
+    │ MCP tools +     │  │ MCP tools +     │
+    │ /relay-* skills │  │ /relay-* skills │
+    └─────────────────┘  └─────────────────┘
+```
 
-```
-[Machine A]                    SSH tunnel                    [Machine B]
-Claude Code ←→ claude-relay ◄══════════════════► claude-relay ←→ Claude Code
-```
+Each Claude Code session loads a `claude-relay` MCP server that connects to the relay. Sessions pair by exchanging session IDs and communicate through MCP tools.
 
 ## Quick start
 
-### Machine B (receiver — start first)
+### 1. Start the relay server
 
 ```bash
-claude-relay listen
-# Output: Relay listening on port 2222
+claude-relay server
+# Output: Relay server listening on localhost:7778
 ```
 
-### Machine A (initiator)
+### 2. Get your session ID
 
-In your Claude Code session, use `/agent-connect`:
-
+In your Claude Code session:
 ```
-You: /agent-connect user@192.168.1.50
-Claude: Connecting to user@192.168.1.50:2222...
-        Connected. Relay bridge is active.
-```
-
-Or connect directly from terminal:
-
-```bash
-claude-relay connect user@192.168.1.50
+You: /relay-status
+Claude: Session ID: abc-123-def
+        Connected: No
+        Unread messages: 0
 ```
 
-### Sending messages
+### 3. Share and connect
 
-```bash
-claude-relay send "Can you check the auth module on your end?"
+Share your session ID with the other person. In either session:
+```
+You: /relay-connect <peer-session-id>
+Claude: Connected to session xyz-789. Relay bridge active.
 ```
 
-Messages from the remote agent appear in your inbox:
+### 4. Send messages
 
-```bash
-claude-relay inbox     # list unread messages
-claude-relay read      # read oldest unread message
+```
+You: /relay-send Can you check the auth module?
+Claude: Message sent to peer session.
+
+        [Reading incoming messages...]
+        From peer: The refresh token TTL is 0 in staging config.
 ```
 
-## Commands
+## Slash commands
 
 | Command | Description |
 |---------|-------------|
-| `claude-relay listen [--port PORT]` | Start relay listener (default: 2222) |
-| `claude-relay connect user@host [port]` | Connect to a remote relay |
-| `claude-relay send <message>` | Send a message to the connected peer |
-| `claude-relay inbox` | List unread messages |
-| `claude-relay read` | Read the oldest unread message |
-| `claude-relay status` | Show connection status |
-| `claude-relay disconnect` | Tear down the connection |
+| `/relay-connect <session-id>` | Connect to another Claude Code session |
+| `/relay-send <message>` | Send a message to the paired session |
+| `/relay-status` | Show connection status and read incoming messages |
 
-## Authentication
+## MCP tools
 
-The relay uses your existing SSH keys (`~/.ssh/id_ed25519`, `~/.ssh/id_rsa`, or `~/.ssh/id_ecdsa`). No additional key setup is needed.
+These tools are available to Claude Code when the `claude-relay` MCP server is running:
 
-If no SSH keys exist, a host key is auto-generated at `~/.claude/relay/host_key`.
+| Tool | Description |
+|------|-------------|
+| `relay_connect` | Pair with a peer session by ID |
+| `relay_send` | Send a message to the paired peer |
+| `relay_read` | Read and display unread incoming messages |
+| `relay_status` | Show session ID and connection state |
+| `relay_disconnect` | Unpair from the current peer |
+
+## Server commands
+
+| Command | Description |
+|---------|-------------|
+| `claude-relay server [--addr HOST:PORT]` | Start WebSocket relay server (default: localhost:7778) |
+| `claude-relay mcp` | Start MCP server (used by Claude Code, not run manually) |
+
+Legacy SSH commands (`listen`, `connect`) are still available for backward compatibility.
+
+## Configuration
+
+The installer registers the MCP server in `~/.claude/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "claude-relay": {
+      "command": "claude-relay",
+      "args": ["mcp"],
+      "env": {
+        "RELAY_SERVER_URL": "http://localhost:7778"
+      }
+    }
+  }
+}
+```
+
+Skills are installed to `~/.claude/skills/relay-connect/`, `relay-send/`, and `relay-status/`.
+
+## Relay server options
+
+```bash
+claude-relay server                        # default: localhost:7778
+claude-relay server --addr 0.0.0.0:7778    # listen on all interfaces
+claude-relay server --addr :9000           # custom port
+```
 
 ## Message format
 
-Messages are stored as JSON files in `~/.claude/relay/`:
+Messages are stored as JSON in `~/.claude/relay/inbox/` and `outbox/`:
 
-```
-~/.claude/relay/
-├── inbox/           # Messages received from remote agent
-├── outbox/          # Messages queued for delivery
-├── config.json      # Connection configuration
-├── status.json      # Current connection state
-└── host_key         # Auto-generated SSH host key
-```
-
-## Port configuration
-
-Default port is 2222. To use a different port:
-
-```bash
-# Listener
-claude-relay listen --port 3333
-
-# Connector
-claude-relay connect user@host 3333
-```
-
-## Inline chat flow (with Claude Code)
-
-Once connected, the experience is conversational:
-
-**Machine A:**
-```
-You: Hey, can you check the auth module? I see a token expiry bug.
-Claude: [Sent to remote agent]
-        [From machine-b]: The refresh token TTL is 0 in staging config. Want me to fix it?
-You: Yes, bump it to 3600.
-Claude: [Sent to remote agent]
-        [From machine-b]: Done. Committed as abc1234.
-```
-
-**Machine B:**
-```
-        [From machine-a]: Hey, can you check the auth module? I see a token expiry bug.
-You: The refresh token TTL is 0 in staging config. Want me to fix it?
-Claude: [Sent to remote agent]
-        [From machine-a]: Yes, bump it to 3600.
-You: Done. Committed as abc1234.
-Claude: [Sent to remote agent]
+```json
+{
+  "id": "a1b2c3d4-...",
+  "from": "hostname",
+  "timestamp": "2026-04-21T10:30:00Z",
+  "type": "message",
+  "content": "Can you check the auth module?",
+  "read": false
+}
 ```
 
 ## Troubleshooting
 
-### Connection refused
-- Ensure the listener is running on the remote machine: `claude-relay listen`
-- Check the port is open: `nc -zv host 2222`
-- Verify SSH key access between machines
+### "not connected to relay server"
 
-### No SSH keys found
-Generate one: `ssh-keygen -t ed25519`
+The relay server isn't running. Start it:
+```bash
+claude-relay server
+```
+
+### "peer session not found"
+
+The peer hasn't connected to the relay server yet. They need to:
+1. Have `claude-relay` MCP server configured (run the installer)
+2. Start a Claude Code session (the MCP server connects automatically)
+3. Share their session ID (from `/relay-status`)
+
+### MCP server not loading
+
+Check `~/.claude/mcp.json` contains the `claude-relay` entry. Re-run the installer if needed.
 
 ### Messages not appearing
-- Check inbox: `claude-relay inbox`
-- Verify connection: `claude-relay status`
-- Check relay directories exist: `ls ~/.claude/relay/`
+
+Use `/relay-status` to check for unread messages. The `relay_read` tool fetches them from the inbox.

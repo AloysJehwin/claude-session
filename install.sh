@@ -5,7 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 HOOKS_DIR="$HOME/.claude/hooks"
+SKILLS_DIR="$HOME/.claude/skills"
 SETTINGS="$HOME/.claude/settings.json"
+MCP_JSON="$HOME/.claude/mcp.json"
 
 echo "Installing claude-session..."
 
@@ -105,6 +107,91 @@ else
   echo "    $PATH_LINE"
 fi
 
+# 5. Build and install claude-relay (Agent Connect)
+if command -v go &>/dev/null && [[ -d "$SCRIPT_DIR/bridge" ]]; then
+  echo ""
+  echo "Building claude-relay (Agent Connect)..."
+  (cd "$SCRIPT_DIR/bridge" && go build -o claude-relay . 2>&1)
+  if [[ -f "$SCRIPT_DIR/bridge/claude-relay" ]]; then
+    cp "$SCRIPT_DIR/bridge/claude-relay" "$BIN_DIR/claude-relay"
+    chmod +x "$BIN_DIR/claude-relay"
+    echo "  Installed claude-relay → $BIN_DIR/claude-relay"
+  fi
+else
+  echo ""
+  echo "  Skipping claude-relay build (Go not installed or bridge/ missing)"
+  echo "  To install Agent Connect later: cd bridge && go build -o claude-relay . && cp claude-relay ~/.local/bin/"
+fi
+
+# 6. Install relay skills
+echo ""
+echo "Installing relay skills..."
+for skill in relay-connect relay-send relay-status; do
+  if [[ -d "$SCRIPT_DIR/skills/$skill" ]]; then
+    mkdir -p "$SKILLS_DIR/$skill"
+    cp "$SCRIPT_DIR/skills/$skill/SKILL.md" "$SKILLS_DIR/$skill/SKILL.md"
+    echo "  Installed skill: /relay-$skill → $SKILLS_DIR/$skill/"
+  fi
+done
+
+# 7. Register MCP server
+if [[ -f "$BIN_DIR/claude-relay" ]]; then
+  echo ""
+  echo "Registering claude-relay MCP server..."
+  if [[ -f "$MCP_JSON" ]]; then
+    if python3 -c "
+import json, sys
+with open('$MCP_JSON') as f:
+    s = json.load(f)
+if 'claude-relay' in s.get('mcpServers', {}):
+    sys.exit(0)
+sys.exit(1)
+" 2>/dev/null; then
+      echo "  claude-relay MCP server already registered"
+    else
+      python3 -c "
+import json
+with open('$MCP_JSON') as f:
+    s = json.load(f)
+if 'mcpServers' not in s:
+    s['mcpServers'] = {}
+s['mcpServers']['claude-relay'] = {
+    'command': '$BIN_DIR/claude-relay',
+    'args': ['mcp'],
+    'env': {
+        'RELAY_SERVER_URL': 'http://localhost:7778'
+    }
+}
+with open('$MCP_JSON', 'w') as f:
+    json.dump(s, f, indent=2)
+    f.write('\n')
+"
+      echo "  Added claude-relay to $MCP_JSON"
+    fi
+  else
+    mkdir -p "$(dirname "$MCP_JSON")"
+    cat > "$MCP_JSON" << MCPEOF
+{
+  "mcpServers": {
+    "claude-relay": {
+      "command": "$BIN_DIR/claude-relay",
+      "args": ["mcp"],
+      "env": {
+        "RELAY_SERVER_URL": "http://localhost:7778"
+      }
+    }
+  }
+}
+MCPEOF
+    echo "  Created $MCP_JSON with claude-relay MCP server"
+  fi
+fi
+
 echo ""
 echo "Done! Open a new terminal, then run:"
 echo "  claude-session --help"
+echo ""
+echo "For Agent Connect:"
+echo "  1. Start the relay server: claude-relay server"
+echo "  2. In Claude Code, use /relay-status to see your session ID"
+echo "  3. Share your session ID with a peer, then /relay-connect <peer-id>"
