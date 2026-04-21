@@ -9,6 +9,7 @@
 #   claude-session --list                 List available sessions
 #   claude-session --load <id>            Load a specific session (date or filename)
 #   claude-session --help                 Show this help
+#   claude-session --version              Show version
 #
 # Model can be specified as:
 #   --model <name>    Full flag (e.g., --model claude-opus-4-6)
@@ -22,6 +23,7 @@ set -euo pipefail
 
 CLAUDE_BASE_DIR="$HOME/.claude"
 MAX_CONTEXT_CHARS=2000
+VERSION="1.0.0"
 
 # Model alias map — shorthand names to full model identifiers
 resolve_model() {
@@ -224,6 +226,7 @@ USAGE:
   claude-session --list                   List available session logs
   claude-session --load <id>              Load a specific session (date or partial match)
   claude-session --help                   Show this help
+  claude-session --version                Show version
 
 MODEL SHORTCUTS:
   opus, o       → claude-opus-4-6
@@ -348,16 +351,25 @@ cmd_resume() {
     return
   fi
 
-  local context
+  local context sid
   context=$(build_context "$latest")
+  sid=$(extract_session_id "$latest")
   echo "Resuming from: $(basename "$latest" .md)"
   echo "Starting Claude Code..."
 
   export CLAUDE_SESSION_FILE="$latest"
-  if [[ -n "$context" ]]; then
-    exec claude --continue --append-system-prompt "$context" ${@+"$@"}
+  if [[ -n "$sid" ]]; then
+    if [[ -n "$context" ]]; then
+      exec claude --resume "$sid" --append-system-prompt "$context" ${@+"$@"}
+    else
+      exec claude --resume "$sid" ${@+"$@"}
+    fi
   else
-    exec claude --continue ${@+"$@"}
+    if [[ -n "$context" ]]; then
+      exec claude --continue --append-system-prompt "$context" ${@+"$@"}
+    else
+      exec claude --continue ${@+"$@"}
+    fi
   fi
 }
 
@@ -376,6 +388,10 @@ main() {
     case "$1" in
       --help|-h)
         cmd_help
+        return
+        ;;
+      --version|-V)
+        echo "claude-session $VERSION"
         return
         ;;
       --list|-l)

@@ -65,6 +65,7 @@ claude-session --model sonnet      # resume with specific model
 claude-session --list              # list all sessions
 claude-session --load 2026-04-11   # load specific session
 claude-session --help              # show help
+claude-session --version           # show version
 ```
 
 ## Model shortcuts
@@ -85,5 +86,6 @@ claude-session --help              # show help
 | `--load <date>` | | Load a specific session by date or partial match |
 | `--model <name>` | `-m` | Set the model (alias or full name) |
 | `--help` | `-h` | Show help |
+| `--version` | `-V` | Show version |
 
 Any other flags are passed through to `claude` directly.
