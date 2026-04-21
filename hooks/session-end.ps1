@@ -80,6 +80,47 @@ except Exception:
 }
 
 # ---------------------------------------------------------------------------
+# If the session had no user messages, clean up the empty session file
+# ---------------------------------------------------------------------------
+
+$hasUserMsg = $false
+if ($transcriptPath -and (Test-Path $transcriptPath)) {
+    try {
+        $checkScript = @"
+import json, sys
+try:
+    with open(sys.argv[1], 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            if obj.get('type') == 'user':
+                print('yes')
+                break
+except Exception:
+    pass
+"@
+        $result = ($checkScript | python3 - $transcriptPath 2>$null).Trim()
+        if ($result -eq "yes") { $hasUserMsg = $true }
+    } catch {}
+}
+
+if (-not $hasUserMsg) {
+    $sf = $env:CLAUDE_SESSION_FILE
+    if ($sf -and (Test-Path $sf)) {
+        $bn = [System.IO.Path]::GetFileNameWithoutExtension($sf)
+        Remove-Item -Path $sf -Force
+        if (Test-Path $memoryMd) {
+            $content = Get-Content $memoryMd
+            $filtered = $content | Where-Object { $_ -notmatch [regex]::Escape($bn) }
+            Set-Content -Path $memoryMd -Value $filtered -Encoding UTF8
+        }
+    }
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
 # Determine which session file to update
 # ---------------------------------------------------------------------------
 
