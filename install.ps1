@@ -19,7 +19,12 @@ Copy-Item (Join-Path $ScriptDir "bin\claude-session.ps1") (Join-Path $BinDir "cl
 # Create a .cmd wrapper so you can just type "claude-session" from cmd/powershell
 $cmdWrapper = @"
 @echo off
-powershell -ExecutionPolicy Bypass -NoProfile -File "%USERPROFILE%\.local\bin\claude-session.ps1" %*
+where pwsh >nul 2>nul
+if %errorlevel% equ 0 (
+    pwsh -ExecutionPolicy Bypass -NoProfile -File "%USERPROFILE%\.local\bin\claude-session.ps1" %*
+) else (
+    powershell -ExecutionPolicy Bypass -NoProfile -File "%USERPROFILE%\.local\bin\claude-session.ps1" %*
+)
 "@
 Set-Content -Path (Join-Path $BinDir "claude-session.cmd") -Value $cmdWrapper -Encoding ASCII
 
@@ -105,6 +110,29 @@ if ($currentPath -notlike "*$BinDir*") {
     $newUserPath = if ([string]::IsNullOrWhiteSpace($currentPath)) { $BinDir } else { "$BinDir;$currentPath" }
     [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
     Write-Host "  Added $BinDir to user PATH" -ForegroundColor Green
+
+    # Broadcast WM_SETTINGCHANGE so open terminals/Explorer pick up the new PATH
+    try {
+        if (-not ([System.Management.Automation.PSTypeName]'Win32.NativeMethods').Type) {
+            Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition @"
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+public static extern IntPtr SendMessageTimeout(
+    IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam,
+    uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+"@
+        }
+        $HWND_BROADCAST = [IntPtr]0xffff
+        $WM_SETTINGCHANGE = 0x001A
+        $SMTO_ABORTIFHUNG = 0x0002
+        $result = [UIntPtr]::Zero
+        [Win32.NativeMethods]::SendMessageTimeout(
+            $HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero,
+            "Environment", $SMTO_ABORTIFHUNG, 5000, [ref]$result
+        ) | Out-Null
+        Write-Host "  Broadcast environment change to running processes" -ForegroundColor Green
+    } catch {
+        Write-Host "  Note: Restart your terminal to pick up the new PATH" -ForegroundColor Yellow
+    }
 } else {
     Write-Host "  $BinDir already on PATH" -ForegroundColor Yellow
 }
@@ -116,7 +144,21 @@ if ($env:Path -notlike "*$BinDir*") {
     Write-Host "  Added $BinDir to PATH for this current PowerShell session" -ForegroundColor Green
 }
 
+# Verify the .cmd wrapper exists and is accessible
+$cmdPath = Join-Path $BinDir "claude-session.cmd"
+if (Test-Path $cmdPath) {
+    Write-Host "  Verified: claude-session.cmd exists at $cmdPath" -ForegroundColor Green
+} else {
+    Write-Host "  WARNING: claude-session.cmd was not found at $cmdPath" -ForegroundColor Red
+}
+
 Write-Host ""
-Write-Host "Done! If this install was run in a separate PowerShell process, reopen your terminal app (Windows Terminal / VS Code) once." -ForegroundColor Cyan
-Write-Host "Then run:" -ForegroundColor Cyan
-Write-Host "  claude-session --help" -ForegroundColor White
+Write-Host "Installation complete!" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "IMPORTANT: If 'claude-session' is not recognized:" -ForegroundColor Yellow
+Write-Host "  1. Close ALL terminal windows (PowerShell, cmd, Windows Terminal, VS Code)" -ForegroundColor Yellow
+Write-Host "  2. Open a fresh terminal" -ForegroundColor Yellow
+Write-Host "  3. Run: claude-session --help" -ForegroundColor White
+Write-Host ""
+Write-Host "To verify PATH was updated, run in a NEW terminal:" -ForegroundColor Cyan
+Write-Host "  echo `$env:Path | Select-String '.local\\bin'" -ForegroundColor White

@@ -7,6 +7,7 @@
 #   claude-session --list                 List available sessions
 #   claude-session --load <id>            Load a specific session
 #   claude-session --help                 Show this help
+#   claude-session --version              Show version
 
 param(
     [switch]$new,
@@ -26,6 +27,10 @@ param(
     [Alias("h")]
     [switch]$ShowHelp,
 
+    [switch]$version,
+    [Alias("V")]
+    [switch]$ShowVersion,
+
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Remaining
 )
@@ -38,6 +43,7 @@ $ErrorActionPreference = "Stop"
 
 $CLAUDE_BASE_DIR = Join-Path $env:USERPROFILE ".claude"
 $MAX_CONTEXT_CHARS = 2000
+$CLAUDE_SESSION_VERSION = "1.0.0"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -234,6 +240,7 @@ USAGE:
   claude-session -list                    List available session logs
   claude-session -load <id>              Load a specific session (date or partial match)
   claude-session -help                    Show this help
+  claude-session -version                 Show version
 
 MODEL SHORTCUTS:
   opus, o       -> claude-opus-4-6
@@ -358,12 +365,17 @@ function Start-ResumeSession {
     }
 
     $context = Build-Context -SessionFile $latest
+    $sid = Extract-SessionId -File $latest
     $basename = [System.IO.Path]::GetFileNameWithoutExtension($latest)
     Write-Host "Resuming from: $basename"
     Write-Host "Starting Claude Code..."
 
     $env:CLAUDE_SESSION_FILE = $latest
-    $args = @("--continue")
+    if ($sid) {
+        $args = @("--resume", $sid)
+    } else {
+        $args = @("--continue")
+    }
     if ($context) { $args += "--append-system-prompt"; $args += $context }
     $args += $ExtraArgs
     & claude @args
@@ -394,6 +406,8 @@ if ($Remaining) { $passthrough += $Remaining }
 # Dispatch
 if ($help -or $ShowHelp) {
     Show-Help
+} elseif ($version -or $ShowVersion) {
+    Write-Host "claude-session $CLAUDE_SESSION_VERSION"
 } elseif ($list -or $ListSessions) {
     Show-List
 } elseif ($new -or $NewSession) {
