@@ -2,12 +2,11 @@ package cmd
 
 import (
 	"fmt"
-
-	"github.com/AloysJehwin/claude-session/bridge/relay"
 )
 
 func Inbox() error {
-	messages, _, err := relay.ListInbox(true)
+	store := defaultStore()
+	messages, _, err := store.ListInbox(true)
 	if err != nil {
 		return err
 	}
@@ -23,7 +22,8 @@ func Inbox() error {
 }
 
 func Read() error {
-	messages, paths, err := relay.ListInbox(true)
+	store := defaultStore()
+	messages, paths, err := store.ListInbox(true)
 	if err != nil {
 		return err
 	}
@@ -33,5 +33,5 @@ func Read() error {
 	}
 	msg := messages[0]
 	fmt.Printf("[From %s at %s]:\n%s\n", msg.From, msg.Timestamp.Format("2006-01-02 15:04:05"), msg.Content)
-	return relay.MarkAsRead(paths[0])
+	return store.MarkAsRead(paths[0])
 }

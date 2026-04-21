@@ -7,8 +7,9 @@ import (
 )
 
 func Send(content string) error {
-	msg := relay.NewMessage(content, "message")
-	path, err := relay.WriteToOutbox(msg)
+	store := defaultStore()
+	msg := relay.NewMessage(content, "message", defaultSessionID())
+	path, err := store.WriteToOutbox(msg)
 	if err != nil {
 		return fmt.Errorf("write to outbox: %w", err)
 	}

@@ -12,7 +12,8 @@ import (
 )
 
 func Connect(target string, port int) error {
-	if err := relay.EnsureDirs(); err != nil {
+	store := defaultStore()
+	if err := store.EnsureDirs(); err != nil {
 		return err
 	}
 
@@ -43,7 +44,7 @@ func Connect(target string, port int) error {
 		tunnel.Close()
 	}()
 
-	watcher := relay.NewOutboxWatcher()
+	watcher := relay.NewOutboxWatcher(store)
 	go watcher.Watch(func(msg *relay.Message, path string) {
 		if err := tunnel.Send(msg); err != nil {
 			fmt.Fprintf(os.Stderr, "Send error: %v\n", err)
@@ -53,7 +54,10 @@ func Connect(target string, port int) error {
 	})
 
 	tunnel.ReceiveLoop(func(msg *relay.Message) {
-		relay.WriteToInbox(msg)
+		if _, err := store.WriteToInbox(msg); err != nil {
+			fmt.Fprintf(os.Stderr, "Inbox write error: %v\n", err)
+			return
+		}
 		fmt.Printf("[From %s]: %s\n", msg.From, msg.Content)
 	})
 

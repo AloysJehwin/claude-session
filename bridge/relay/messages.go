@@ -15,6 +15,7 @@ import (
 type Message struct {
 	ID        string    `json:"id"`
 	From      string    `json:"from"`
+	To        string    `json:"to,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 	Type      string    `json:"type"` // "message", "status"
 	Content   string    `json:"content"`
@@ -22,11 +23,10 @@ type Message struct {
 	Read      bool      `json:"read"`
 }
 
-func NewMessage(content, msgType string) *Message {
-	hostname, _ := os.Hostname()
+func NewMessage(content, msgType, from string) *Message {
 	return &Message{
 		ID:        uuid.New().String(),
-		From:      hostname,
+		From:      from,
 		Timestamp: time.Now().UTC(),
 		Type:      msgType,
 		Content:   content,
@@ -38,46 +38,10 @@ func RelayDir() string {
 	return filepath.Join(home, ".claude", "relay")
 }
 
-func InboxDir() string  { return filepath.Join(RelayDir(), "inbox") }
-func OutboxDir() string { return filepath.Join(RelayDir(), "outbox") }
-
-func EnsureDirs() error {
-	for _, d := range []string{InboxDir(), OutboxDir()} {
-		if err := os.MkdirAll(d, 0755); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func msgFilename(msg *Message) string {
 	ts := msg.Timestamp.Format("20060102_150405")
 	short := msg.ID[:8]
 	return fmt.Sprintf("msg_%s_%s.json", ts, short)
-}
-
-func WriteToOutbox(msg *Message) (string, error) {
-	if err := EnsureDirs(); err != nil {
-		return "", err
-	}
-	path := filepath.Join(OutboxDir(), msgFilename(msg))
-	data, err := json.MarshalIndent(msg, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return path, os.WriteFile(path, data, 0644)
-}
-
-func WriteToInbox(msg *Message) (string, error) {
-	if err := EnsureDirs(); err != nil {
-		return "", err
-	}
-	path := filepath.Join(InboxDir(), msgFilename(msg))
-	data, err := json.MarshalIndent(msg, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return path, os.WriteFile(path, data, 0644)
 }
 
 func ReadMessage(path string) (*Message, error) {
@@ -92,7 +56,71 @@ func ReadMessage(path string) (*Message, error) {
 	return &msg, nil
 }
 
-func MarkAsRead(path string) error {
+func MessageToJSON(msg *Message) ([]byte, error) {
+	return json.Marshal(msg)
+}
+
+func MessageFromJSON(data []byte) (*Message, error) {
+	var msg Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
+// SessionStore scopes inbox/outbox directories to a specific session ID.
+type SessionStore struct {
+	sessionID string
+}
+
+func NewSessionStore(sessionID string) *SessionStore {
+	return &SessionStore{sessionID: sessionID}
+}
+
+func (ss *SessionStore) SessionID() string { return ss.sessionID }
+
+func (ss *SessionStore) InboxDir() string {
+	return filepath.Join(RelayDir(), ss.sessionID, "inbox")
+}
+
+func (ss *SessionStore) OutboxDir() string {
+	return filepath.Join(RelayDir(), ss.sessionID, "outbox")
+}
+
+func (ss *SessionStore) EnsureDirs() error {
+	for _, d := range []string{ss.InboxDir(), ss.OutboxDir()} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ss *SessionStore) WriteToOutbox(msg *Message) (string, error) {
+	if err := ss.EnsureDirs(); err != nil {
+		return "", err
+	}
+	path := filepath.Join(ss.OutboxDir(), msgFilename(msg))
+	data, err := json.MarshalIndent(msg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return path, os.WriteFile(path, data, 0644)
+}
+
+func (ss *SessionStore) WriteToInbox(msg *Message) (string, error) {
+	if err := ss.EnsureDirs(); err != nil {
+		return "", err
+	}
+	path := filepath.Join(ss.InboxDir(), msgFilename(msg))
+	data, err := json.MarshalIndent(msg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return path, os.WriteFile(path, data, 0644)
+}
+
+func (ss *SessionStore) MarkAsRead(path string) error {
 	msg, err := ReadMessage(path)
 	if err != nil {
 		return err
@@ -105,8 +133,8 @@ func MarkAsRead(path string) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-func ListInbox(unreadOnly bool) ([]*Message, []string, error) {
-	entries, err := os.ReadDir(InboxDir())
+func (ss *SessionStore) ListInbox(unreadOnly bool) ([]*Message, []string, error) {
+	entries, err := os.ReadDir(ss.InboxDir())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil, nil
@@ -125,7 +153,7 @@ func ListInbox(unreadOnly bool) ([]*Message, []string, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		path := filepath.Join(InboxDir(), e.Name())
+		path := filepath.Join(ss.InboxDir(), e.Name())
 		msg, err := ReadMessage(path)
 		if err != nil {
 			continue
@@ -139,8 +167,8 @@ func ListInbox(unreadOnly bool) ([]*Message, []string, error) {
 	return messages, paths, nil
 }
 
-func ListOutbox() ([]*Message, []string, error) {
-	entries, err := os.ReadDir(OutboxDir())
+func (ss *SessionStore) ListOutbox() ([]*Message, []string, error) {
+	entries, err := os.ReadDir(ss.OutboxDir())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil, nil
@@ -155,7 +183,7 @@ func ListOutbox() ([]*Message, []string, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		path := filepath.Join(OutboxDir(), e.Name())
+		path := filepath.Join(ss.OutboxDir(), e.Name())
 		msg, err := ReadMessage(path)
 		if err != nil {
 			continue
@@ -164,16 +192,4 @@ func ListOutbox() ([]*Message, []string, error) {
 		paths = append(paths, path)
 	}
 	return messages, paths, nil
-}
-
-func MessageToJSON(msg *Message) ([]byte, error) {
-	return json.Marshal(msg)
-}
-
-func MessageFromJSON(data []byte) (*Message, error) {
-	var msg Message
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, err
-	}
-	return &msg, nil
 }

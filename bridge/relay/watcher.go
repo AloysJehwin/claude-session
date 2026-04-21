@@ -14,9 +14,9 @@ type Watcher struct {
 	done     chan struct{}
 }
 
-func NewOutboxWatcher() *Watcher {
+func NewOutboxWatcher(store *SessionStore) *Watcher {
 	return &Watcher{
-		dir:      OutboxDir(),
+		dir:      store.OutboxDir(),
 		seen:     make(map[string]bool),
 		interval: 500 * time.Millisecond,
 		done:     make(chan struct{}),
