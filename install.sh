@@ -115,6 +115,10 @@ if command -v go &>/dev/null && [[ -d "$SCRIPT_DIR/bridge" ]]; then
   if [[ -f "$SCRIPT_DIR/bridge/claude-relay" ]]; then
     cp "$SCRIPT_DIR/bridge/claude-relay" "$BIN_DIR/claude-relay"
     chmod +x "$BIN_DIR/claude-relay"
+    # Ad-hoc code sign on macOS to prevent Gatekeeper from killing the binary
+    if [[ "$(uname)" == "Darwin" ]]; then
+      codesign -s - "$BIN_DIR/claude-relay" 2>/dev/null || true
+    fi
     echo "  Installed claude-relay → $BIN_DIR/claude-relay"
   fi
 else

@@ -48,7 +48,7 @@ func (s *MCPServer) handleRequest(req *JSONRPCRequest) {
 	case "initialize":
 		s.handleInitialize(req)
 	case "initialized":
-		s.connectToRelay()
+		s.ensureConnected()
 	case "tools/list":
 		s.handleToolsList(req)
 	case "tools/call":
@@ -95,6 +95,8 @@ func (s *MCPServer) handleToolsCall(req *JSONRPCRequest) {
 		return
 	}
 
+	s.ensureConnected()
+
 	result, err := s.handleToolCall(params.Name, params.Arguments)
 	if err != nil {
 		s.transport.SendResult(req.ID, map[string]interface{}{
@@ -120,15 +122,17 @@ func (s *MCPServer) handleToolsCall(req *JSONRPCRequest) {
 	})
 }
 
-func (s *MCPServer) connectToRelay() {
+func (s *MCPServer) ensureConnected() {
+	if s.wsClient != nil {
+		return
+	}
 	if s.serverURL == "" {
-		log.Println("No relay server URL configured, tools will work in offline mode")
 		return
 	}
 
 	client, err := wsrelay.Dial(s.serverURL, s.sessionID)
 	if err != nil {
-		log.Printf("Failed to connect to relay server: %v", err)
+		log.Printf("Relay server not reachable at %s: %v", s.serverURL, err)
 		return
 	}
 

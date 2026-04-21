@@ -50,7 +50,8 @@ func main() {
 	case "mcp":
 		sessionID := os.Getenv("CLAUDE_SESSION_ID")
 		if sessionID == "" {
-			sessionID = "unknown"
+			hostname, _ := os.Hostname()
+			sessionID = fmt.Sprintf("%s-%d", hostname, os.Getpid())
 		}
 		serverURL := os.Getenv("RELAY_SERVER_URL")
 		if serverURL == "" {
