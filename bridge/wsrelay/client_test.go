@@ -43,7 +43,7 @@ func TestClientPairAndMessage(t *testing.T) {
 		t.Fatal("A not paired")
 	}
 
-	msg := relay.NewMessage("hello from A", "message")
+	msg := relay.NewMessage("hello from A", "message", "session-A")
 	if err := clientA.Send(msg); err != nil {
 		t.Fatalf("send: %v", err)
 	}

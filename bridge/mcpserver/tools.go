@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/AloysJehwin/claude-session/bridge/config"
@@ -136,12 +137,14 @@ func (s *MCPServer) toolSend(args json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("not paired with any session. Use relay_connect first.")
 	}
 
-	msg := relay.NewMessage(params.Message, "message")
+	msg := relay.NewMessage(params.Message, "message", s.sessionID)
 	if err := s.wsClient.Send(msg); err != nil {
 		return nil, fmt.Errorf("send failed: %w", err)
 	}
 
-	relay.WriteToOutbox(msg)
+	if _, err := s.store.WriteToOutbox(msg); err != nil {
+		log.Printf("Failed to write to outbox: %v", err)
+	}
 
 	return map[string]interface{}{
 		"status":  "sent",
@@ -150,13 +153,13 @@ func (s *MCPServer) toolSend(args json.RawMessage) (interface{}, error) {
 }
 
 func (s *MCPServer) toolRead() (interface{}, error) {
-	messages, paths, err := relay.ListInbox(true)
+	messages, paths, err := s.store.ListInbox(true)
 	if err != nil {
 		return nil, fmt.Errorf("read inbox: %w", err)
 	}
 
 	for _, p := range paths {
-		relay.MarkAsRead(p)
+		s.store.MarkAsRead(p)
 	}
 
 	if len(messages) == 0 {
@@ -199,7 +202,7 @@ func (s *MCPServer) toolStatus() (interface{}, error) {
 		result["connected"] = false
 	}
 
-	unread, _, _ := relay.ListInbox(true)
+	unread, _, _ := s.store.ListInbox(true)
 	result["unread_messages"] = len(unread)
 
 	return result, nil

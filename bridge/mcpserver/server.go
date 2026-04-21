@@ -15,6 +15,7 @@ type MCPServer struct {
 	sessionID string
 	serverURL string
 	wsClient  *wsrelay.Client
+	store     *relay.SessionStore
 }
 
 func New(sessionID, serverURL string) *MCPServer {
@@ -22,11 +23,12 @@ func New(sessionID, serverURL string) *MCPServer {
 		transport: NewStdioTransport(),
 		sessionID: sessionID,
 		serverURL: serverURL,
+		store:     relay.NewSessionStore(sessionID),
 	}
 }
 
 func (s *MCPServer) Run() error {
-	relay.EnsureDirs()
+	s.store.EnsureDirs()
 
 	log.SetOutput(os.Stderr)
 
@@ -144,7 +146,10 @@ func (s *MCPServer) ensureConnected() {
 	log.Printf("Connected to relay server at %s as session %s", s.serverURL, s.sessionID)
 
 	client.OnMessage(func(msg *relay.Message) {
-		relay.WriteToInbox(msg)
+		if _, err := s.store.WriteToInbox(msg); err != nil {
+			log.Printf("Failed to write incoming message to inbox: %v", err)
+			return
+		}
 		log.Printf("Received message from %s: %s", msg.From, msg.Content)
 	})
 }
