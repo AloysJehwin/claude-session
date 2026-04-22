@@ -49,6 +49,7 @@ Claude Code starts each conversation fresh. There's no built-in way to carry con
 | git | `git --version` | [git-scm.com](https://git-scm.com/) (optional, for capturing changes) |
 | bash 3.2+ *(macOS/Linux only)* | `bash --version` | Ships with macOS/Linux |
 | PowerShell 5+ *(Windows only)* | `$PSVersionTable` | Ships with Windows 10/11 |
+| Go 1.21+ *(optional, for Agent Connect)* | `go version` | [go.dev](https://go.dev/dl/) |
 
 ---
 
@@ -143,12 +144,21 @@ claude-session/
 ├── bin/
 │   ├── claude-session         # CLI wrapper (macOS/Linux)
 │   └── claude-session.ps1     # CLI wrapper (Windows)
+├── bridge/                    # Go source for claude-relay (agent connect)
+│   ├── main.go
+│   ├── cmd/                   # CLI subcommands
+│   ├── relay/                 # SSH tunnel, messaging, file watcher
+│   ├── config/                # Relay configuration
+│   └── Makefile
 ├── hooks/
 │   ├── session-end.sh         # SessionEnd hook (macOS/Linux)
-│   └── session-end.ps1        # SessionEnd hook (Windows)
+│   ├── session-end.ps1        # SessionEnd hook (Windows)
+│   ├── relay-poll.sh          # Relay inbox poll (macOS/Linux)
+│   └── relay-poll.ps1         # Relay inbox poll (Windows)
 ├── docs/
 │   ├── usage.md               # Commands, flags, model shortcuts
 │   ├── how-it-works.md        # Session storage, file format, internals
+│   ├── agent-connect.md       # Cross-machine agent communication
 │   └── troubleshooting.md     # Common issues and fixes
 ├── install.sh / install.ps1
 ├── uninstall.sh / uninstall.ps1
@@ -158,10 +168,17 @@ claude-session/
 
 ---
 
-## Docs
+## Documentation
 
 | Document | Description |
 |----------|-------------|
 | [Usage](docs/usage.md) | Commands, flags, model shortcuts, managing sessions |
 | [How It Works](docs/how-it-works.md) | Session storage, file format, context injection, session tags |
+| [Agent Connect](docs/agent-connect.md) | Cross-machine agent communication via SSH |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
+
+---
+
+## License
+
+[MIT](LICENSE)
