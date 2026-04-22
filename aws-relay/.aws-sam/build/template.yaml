@@ -22,6 +22,22 @@ Resources:
       AuthorizationType: NONE
       Target:
         Fn::Sub: integrations/${RelayIntegration}
+  ConnectRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId:
+        Ref: RelayWebSocketApi
+      RouteId:
+        Ref: ConnectRoute
+      RouteResponseKey: $default
+  ConnectIntegrationResponse:
+    Type: AWS::ApiGatewayV2::IntegrationResponse
+    Properties:
+      ApiId:
+        Ref: RelayWebSocketApi
+      IntegrationId:
+        Ref: RelayIntegration
+      IntegrationResponseKey: $default
   DisconnectRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:

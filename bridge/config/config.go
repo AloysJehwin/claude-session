@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -80,6 +81,36 @@ func ClearStatus() error {
 	return nil
 }
 
+func SessionStatusPath(sessionID string) string {
+	return filepath.Join(relayDir(), sessionID, "status.json")
+}
+
+func LoadSessionStatus(sessionID string) (*Status, error) {
+	data, err := os.ReadFile(SessionStatusPath(sessionID))
+	if err != nil {
+		return &Status{}, nil
+	}
+	var st Status
+	if err := json.Unmarshal(data, &st); err != nil {
+		return &Status{}, nil
+	}
+	return &st, nil
+}
+
+func SaveSessionStatus(sessionID string, st *Status) error {
+	dir := filepath.Join(relayDir(), sessionID)
+	os.MkdirAll(dir, 0755)
+	data, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(SessionStatusPath(sessionID), data, 0644)
+}
+
+func ClearSessionStatus(sessionID string) error {
+	return os.Remove(SessionStatusPath(sessionID))
+}
+
 func SavePID(pid int) error {
 	os.MkdirAll(relayDir(), 0755)
 	data, _ := json.Marshal(pid)
@@ -96,4 +127,62 @@ func LoadPID() (int, error) {
 		return 0, err
 	}
 	return pid, nil
+}
+
+// ActiveSession records which MCP server session is currently running.
+
+type ActiveSession struct {
+	SessionID string `json:"session_id"`
+	PID       int    `json:"pid"`
+	Since     string `json:"since"`
+}
+
+func ActiveSessionPath() string {
+	return filepath.Join(relayDir(), "active-session")
+}
+
+func SaveActiveSession(sessionID string) error {
+	os.MkdirAll(relayDir(), 0755)
+	pid := os.Getpid()
+	as := ActiveSession{
+		SessionID: sessionID,
+		PID:       pid,
+		Since:     time.Now().UTC().Format(time.RFC3339),
+	}
+	data, err := json.MarshalIndent(as, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(ActiveSessionPath(), data, 0644)
+}
+
+func LoadActiveSession() (*ActiveSession, error) {
+	data, err := os.ReadFile(ActiveSessionPath())
+	if err != nil {
+		return nil, err
+	}
+	var as ActiveSession
+	if err := json.Unmarshal(data, &as); err != nil {
+		return nil, err
+	}
+	return &as, nil
+}
+
+func ClearActiveSession() error {
+	as, err := LoadActiveSession()
+	if err != nil {
+		return nil
+	}
+	if as.PID == os.Getpid() {
+		return os.Remove(ActiveSessionPath())
+	}
+	return nil
+}
+
+func IsProcessRunning(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || err == syscall.EPERM
 }

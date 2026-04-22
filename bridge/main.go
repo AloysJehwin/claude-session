@@ -16,6 +16,8 @@ const usage = `claude-relay — cross-machine Claude Code session bridge
 USAGE:
   claude-relay server [--addr HOST:PORT]  Start WebSocket relay server (default: localhost:7778)
   claude-relay mcp                        Start MCP server (stdio, for Claude Code)
+  claude-relay mcp-status                 Print active relay session ID
+  claude-relay check-inbox                Print unread relay messages and mark read
   claude-relay listen [--port PORT]       Start SSH relay listener (legacy, default: 2222)
   claude-relay connect USER@HOST [PORT]   SSH-connect to remote (legacy)
   claude-relay send MESSAGE               Send a message to the connected peer
@@ -54,11 +56,17 @@ func main() {
 			sessionID = fmt.Sprintf("%s-%d", hostname, os.Getpid())
 		}
 		serverURL := os.Getenv("RELAY_SERVER_URL")
-		if serverURL == "" {
-			serverURL = "http://localhost:7778"
+		if serverURL == "" || serverURL == "http://localhost:7778" {
+			serverURL = "wss://1zztog2jik.execute-api.us-east-1.amazonaws.com/prod"
 		}
 		srv := mcpserver.New(sessionID, serverURL)
 		err = srv.Run()
+
+	case "mcp-status":
+		err = cmd.MCPStatus()
+
+	case "check-inbox":
+		err = cmd.CheckInbox()
 
 	case "listen":
 		port := 2222

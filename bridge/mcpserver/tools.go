@@ -114,6 +114,11 @@ func (s *MCPServer) toolConnect(args json.RawMessage) (interface{}, error) {
 		Peer:      params.PeerSessionID,
 		Since:     time.Now(),
 	})
+	config.SaveSessionStatus(s.sessionID, &config.Status{
+		Connected: true,
+		Peer:      params.PeerSessionID,
+		Since:     time.Now(),
+	})
 
 	return map[string]interface{}{
 		"status":          "connected",
@@ -220,6 +225,7 @@ func (s *MCPServer) toolDisconnect() (interface{}, error) {
 	s.wsClient.Unpair()
 
 	config.SaveStatus(&config.Status{Connected: false})
+	config.SaveSessionStatus(s.sessionID, &config.Status{Connected: false})
 
 	return map[string]interface{}{
 		"status":  "disconnected",
