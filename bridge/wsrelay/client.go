@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,8 @@ type Client struct {
 	peerID    string
 	mu        sync.RWMutex
 	onMessage func(*relay.Message)
+	onPaired  func(peerID string)
+	onUnpair  func()
 	done      chan struct{}
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -26,7 +29,12 @@ type Client struct {
 func Dial(serverURL, sessionID string) (*Client, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	conn, _, err := websocket.Dial(ctx, serverURL+"/ws", nil)
+	dialURL := serverURL + "/ws"
+	if strings.HasPrefix(serverURL, "wss://") {
+		dialURL = serverURL
+	}
+
+	conn, _, err := websocket.Dial(ctx, dialURL, nil)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("dial %s: %w", serverURL, err)
@@ -95,6 +103,18 @@ func (c *Client) OnMessage(handler func(*relay.Message)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.onMessage = handler
+}
+
+func (c *Client) OnPaired(handler func(peerID string)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onPaired = handler
+}
+
+func (c *Client) OnUnpair(handler func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onUnpair = handler
 }
 
 func (c *Client) PairWith(peerID string) error {
@@ -181,12 +201,20 @@ func (c *Client) readLoop() {
 		case FramePaired:
 			c.mu.Lock()
 			c.peerID = frame.PeerSessionID
+			handler := c.onPaired
 			c.mu.Unlock()
+			if handler != nil {
+				handler(frame.PeerSessionID)
+			}
 
 		case FrameUnpaired:
 			c.mu.Lock()
 			c.peerID = ""
+			handler := c.onUnpair
 			c.mu.Unlock()
+			if handler != nil {
+				handler()
+			}
 
 		case FrameMessage:
 			msg, err := frame.ExtractMessage()

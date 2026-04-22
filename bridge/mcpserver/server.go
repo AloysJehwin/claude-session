@@ -5,7 +5,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
+	"github.com/AloysJehwin/claude-session/bridge/config"
 	"github.com/AloysJehwin/claude-session/bridge/relay"
 	"github.com/AloysJehwin/claude-session/bridge/wsrelay"
 )
@@ -29,6 +31,8 @@ func New(sessionID, serverURL string) *MCPServer {
 
 func (s *MCPServer) Run() error {
 	s.store.EnsureDirs()
+	config.SaveActiveSession(s.sessionID)
+	defer config.ClearActiveSession()
 
 	log.SetOutput(os.Stderr)
 
@@ -151,5 +155,25 @@ func (s *MCPServer) ensureConnected() {
 			return
 		}
 		log.Printf("Received message from %s: %s", msg.From, msg.Content)
+	})
+
+	client.OnPaired(func(peerID string) {
+		config.SaveSessionStatus(s.sessionID, &config.Status{
+			Connected: true,
+			Peer:      peerID,
+			Since:     time.Now(),
+		})
+		config.SaveStatus(&config.Status{
+			Connected: true,
+			Peer:      peerID,
+			Since:     time.Now(),
+		})
+		log.Printf("Paired with %s", peerID)
+	})
+
+	client.OnUnpair(func() {
+		config.SaveSessionStatus(s.sessionID, &config.Status{Connected: false})
+		config.SaveStatus(&config.Status{Connected: false})
+		log.Printf("Unpaired")
 	})
 }

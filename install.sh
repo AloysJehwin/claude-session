@@ -17,11 +17,19 @@ cp "$SCRIPT_DIR/bin/claude-session" "$BIN_DIR/claude-session"
 chmod +x "$BIN_DIR/claude-session"
 echo "  Installed bin/claude-session → $BIN_DIR/claude-session"
 
-# 2. Install SessionEnd hook
+# 2. Install hooks
 mkdir -p "$HOOKS_DIR"
 cp "$SCRIPT_DIR/hooks/session-end.sh" "$HOOKS_DIR/session-end.sh"
 chmod +x "$HOOKS_DIR/session-end.sh"
 echo "  Installed hooks/session-end.sh → $HOOKS_DIR/session-end.sh"
+
+cp "$SCRIPT_DIR/hooks/relay-session-start.sh" "$HOOKS_DIR/relay-session-start.sh"
+chmod +x "$HOOKS_DIR/relay-session-start.sh"
+echo "  Installed hooks/relay-session-start.sh → $HOOKS_DIR/relay-session-start.sh"
+
+cp "$SCRIPT_DIR/hooks/relay-check-inbox.sh" "$HOOKS_DIR/relay-check-inbox.sh"
+chmod +x "$HOOKS_DIR/relay-check-inbox.sh"
+echo "  Installed hooks/relay-check-inbox.sh → $HOOKS_DIR/relay-check-inbox.sh"
 
 # 3. Add SessionEnd hook to settings.json
 if [[ -f "$SETTINGS" ]]; then
@@ -61,6 +69,47 @@ with open('$SETTINGS', 'w') as f:
 "
     echo "  Added SessionEnd hook to $SETTINGS"
   fi
+
+  # Add relay hooks (SessionStart + UserPromptSubmit)
+  python3 -c "
+import json
+with open('$SETTINGS') as f:
+    s = json.load(f)
+if 'hooks' not in s:
+    s['hooks'] = {}
+changed = False
+if 'SessionStart' not in s['hooks']:
+    s['hooks']['SessionStart'] = [
+        {
+            'hooks': [
+                {
+                    'type': 'command',
+                    'command': 'bash ~/.claude/hooks/relay-session-start.sh',
+                    'timeout': 10
+                }
+            ]
+        }
+    ]
+    changed = True
+if 'UserPromptSubmit' not in s['hooks']:
+    s['hooks']['UserPromptSubmit'] = [
+        {
+            'hooks': [
+                {
+                    'type': 'command',
+                    'command': 'bash ~/.claude/hooks/relay-check-inbox.sh',
+                    'timeout': 10
+                }
+            ]
+        }
+    ]
+    changed = True
+if changed:
+    with open('$SETTINGS', 'w') as f:
+        json.dump(s, f, indent=2)
+        f.write('\n')
+" 2>/dev/null
+  echo "  Configured relay hooks (SessionStart, UserPromptSubmit)"
 else
   # Create settings.json with hook
   mkdir -p "$(dirname "$SETTINGS")"
@@ -163,7 +212,7 @@ s['mcpServers']['claude-relay'] = {
     'command': '$BIN_DIR/claude-relay',
     'args': ['mcp'],
     'env': {
-        'RELAY_SERVER_URL': 'http://localhost:7778'
+        'RELAY_SERVER_URL': 'wss://1zztog2jik.execute-api.us-east-1.amazonaws.com/prod'
     }
 }
 with open('$MCP_JSON', 'w') as f:
@@ -181,7 +230,7 @@ with open('$MCP_JSON', 'w') as f:
       "command": "$BIN_DIR/claude-relay",
       "args": ["mcp"],
       "env": {
-        "RELAY_SERVER_URL": "http://localhost:7778"
+        "RELAY_SERVER_URL": "wss://1zztog2jik.execute-api.us-east-1.amazonaws.com/prod"
       }
     }
   }
@@ -196,6 +245,6 @@ echo "Done! Open a new terminal, then run:"
 echo "  claude-session --help"
 echo ""
 echo "For Agent Connect:"
-echo "  1. Start the relay server: claude-relay server"
-echo "  2. In Claude Code, use /relay-status to see your session ID"
-echo "  3. Share your session ID with a peer, then /relay-connect <peer-id>"
+echo "  Your relay session ID will appear automatically when you start Claude Code."
+echo "  Share your session ID with a peer, then /relay-connect <peer-id>"
+echo "  Incoming messages appear automatically — no polling needed."
