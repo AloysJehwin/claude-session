@@ -2,13 +2,32 @@
 
 After install, use `claude-session` instead of `claude` in any project directory.
 
+## Interactive mode (default)
+
+Running `claude-session` with no arguments launches an interactive menu:
+
+```
+What would you like to do?
+
+> Open an existing session
+  Create a new session
+```
+
+- **Open an existing session** — shows a filterable list of all sessions for the current project. Select one to resume it with full conversation history.
+- **Create a new session** — prompts you to pick a model (Opus, Sonnet, or Haiku), then launches a fresh Claude Code session.
+
+The menu uses arrow-key navigation when [gum](https://github.com/charmbracelet/gum) is installed (`brew install gum`). Without gum, it falls back to a simple numbered menu.
+
 ## Your first session
 
 ```bash
 cd ~/my-project                   # macOS/Linux
 cd C:\Users\you\my-project        # Windows
 
-# Start a new session — creates a session log and launches Claude Code
+# Option 1: Use the interactive menu
+claude-session
+
+# Option 2: Use flags directly
 claude-session --new
 ```
 
@@ -17,8 +36,12 @@ Claude Code opens normally. Work as usual. When you exit (`Ctrl+C` or `/exit`), 
 ## Resuming next time
 
 ```bash
-# Just run it — auto-loads your latest session context
+# Interactive menu — select "Open an existing session"
 claude-session
+
+# Or use flags to skip the menu:
+claude-session opus --new          # direct: new session with Opus
+claude-session --load 2026-04-12   # direct: load a specific session
 ```
 
 Claude Code starts with your previous session's summary, decisions, and open items injected as context. It knows what you were working on.
@@ -61,8 +84,8 @@ claude-session --delete 2026-04-12
 ## All commands
 
 ```bash
-claude-session                     # resume with latest session context
-claude-session --new               # start a fresh session
+claude-session                     # interactive menu (open existing / create new)
+claude-session --new               # start a fresh session (skip menu)
 claude-session opus --new          # fresh session with specific model
 claude-session --model sonnet      # resume with specific model
 claude-session --list              # list all sessions
@@ -76,10 +99,11 @@ claude-session --version           # show version
 
 | Shorthand | Model |
 |-----------|-------|
-| `opus`, `o` | claude-opus-4-6 |
+| `opus`, `o` | claude-opus-4-7 (latest) |
+| `opus4.6` | claude-opus-4-6 |
 | `sonnet`, `s` | claude-sonnet-4-6 |
 | `haiku`, `h` | claude-haiku-4-5-20251001 |
-| `best` | claude-opus-4-6 |
+| `best` | claude-opus-4-7 |
 
 ## Flags
 

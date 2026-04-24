@@ -1,5 +1,35 @@
 # How It Works
 
+## Interactive menu
+
+When you run `claude-session` with no arguments, an interactive menu appears:
+
+```
+┌─────────────────────────────────────┐
+│  claude-session (no args)           │
+│                                     │
+│  "What would you like to do?"       │
+│  > Open an existing session         │
+│    Create a new session             │
+└──────────┬──────────────────────────┘
+           │
+     ┌─────┴─────┐
+     │           │
+     ▼           ▼
+┌──────────┐ ┌──────────────────┐
+│  Open    │ │  Create new      │
+│  fuzzy   │ │  model picker:   │
+│  session │ │  Opus / Sonnet / │
+│  picker  │ │  Haiku           │
+└────┬─────┘ └────────┬─────────┘
+     │                │
+     ▼                ▼
+  cmd_load         cmd_new
+  (--resume)       (--model)
+```
+
+The menu uses [gum](https://github.com/charmbracelet/gum) for arrow-key navigation when available. Without gum, a numbered fallback menu is shown. All flags (`--new`, `--load`, `--list`, etc.) bypass the menu entirely.
+
 ## Session storage
 
 Sessions are stored per-project in Claude Code's own directory structure:

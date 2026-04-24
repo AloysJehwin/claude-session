@@ -49,6 +49,9 @@ Claude Code starts each conversation fresh. There's no built-in way to carry con
 | git | `git --version` | [git-scm.com](https://git-scm.com/) (optional, for capturing changes) |
 | bash 3.2+ *(macOS/Linux only)* | `bash --version` | Ships with macOS/Linux |
 | PowerShell 5+ *(Windows only)* | `$PSVersionTable` | Ships with Windows 10/11 |
+| [gum](https://github.com/charmbracelet/gum) *(optional)* | `gum --version` | `brew install gum` or `winget install charmbracelet.gum` |
+
+> **Note:** `gum` is optional but recommended. It powers the interactive arrow-key menus when you run `claude-session` with no arguments. Without it, a basic numbered menu is used as a fallback.
 
 ---
 
@@ -115,9 +118,16 @@ claude-session --help
 
 ```bash
 cd ~/your-project
-claude-session --new       # first time — creates a session and launches Claude Code
+
+# Run with no arguments — interactive menu lets you pick:
+#   1. Open an existing session (with fuzzy search)
+#   2. Create a new session (with model selection)
+claude-session
+
+# Or use flags directly:
+claude-session --new       # create a session and launch Claude Code
 # ... work normally, then exit ...
-claude-session             # next time — picks up where you left off
+claude-session             # next time — pick up where you left off
 ```
 
 ---
