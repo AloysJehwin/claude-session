@@ -152,6 +152,18 @@ if (Test-Path $cmdPath) {
     Write-Host "  WARNING: claude-session.cmd was not found at $cmdPath" -ForegroundColor Red
 }
 
+# 5. Check for optional gum dependency
+$gumPath = Get-Command gum -ErrorAction SilentlyContinue
+if ($gumPath) {
+    Write-Host "  gum detected - interactive menus will use arrow-key navigation" -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "  Optional: Install 'gum' for interactive arrow-key menus:" -ForegroundColor Yellow
+    Write-Host "    winget install charmbracelet.gum    # Windows (winget)" -ForegroundColor White
+    Write-Host "    scoop install gum                   # Windows (scoop)" -ForegroundColor White
+    Write-Host "  Without gum, claude-session falls back to numbered menus." -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Cyan
 Write-Host ""
