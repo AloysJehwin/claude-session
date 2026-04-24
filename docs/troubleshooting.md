@@ -1,5 +1,14 @@
 # Troubleshooting
 
+## Interactive menu not showing arrow keys
+
+The interactive menu requires [gum](https://github.com/charmbracelet/gum). Without it, a numbered fallback is used.
+
+**Install gum:**
+- **macOS:** `brew install gum`
+- **Debian/Ubuntu:** `sudo apt install gum`
+- **Windows:** `winget install charmbracelet.gum` or `scoop install gum`
+
 ## `command not found: claude-session`
 
 Open a **new terminal** after running the installer. The PATH change only takes effect in new shells.
