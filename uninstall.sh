@@ -50,3 +50,6 @@ fi
 echo ""
 echo "Done! Session log files in ~/.claude/projects/*/memory/sessions/ are preserved."
 echo "Delete them manually if you want a full cleanup."
+echo ""
+echo "Note: If you installed 'gum' for interactive menus, it is not removed."
+echo "  To remove it:  brew uninstall gum  (or your package manager's equivalent)"

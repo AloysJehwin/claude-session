@@ -64,5 +64,8 @@ Write-Host ""
 Write-Host "Done! Session log files in ~\.claude\projects\*\memory\sessions\ are preserved." -ForegroundColor Cyan
 Write-Host "Delete them manually if you want a full cleanup."
 Write-Host ""
+Write-Host "Note: If you installed 'gum' for interactive menus, it is not removed." -ForegroundColor Yellow
+Write-Host "  To remove it:  winget uninstall charmbracelet.gum  (or scoop uninstall gum)"
+Write-Host ""
 Write-Host "To also remove $BinDir from PATH, run:" -ForegroundColor Yellow
 Write-Host '  $p = [Environment]::GetEnvironmentVariable("Path","User") -replace [regex]::Escape("' + $BinDir + ';"), ""; [Environment]::SetEnvironmentVariable("Path", $p, "User")'

@@ -105,6 +105,17 @@ else
   echo "    $PATH_LINE"
 fi
 
+# 5. Check for optional gum dependency
+if command -v gum &>/dev/null; then
+  echo "  gum detected — interactive menus will use arrow-key navigation"
+else
+  echo ""
+  echo "  Optional: Install 'gum' for interactive arrow-key menus:"
+  echo "    brew install gum        # macOS (Homebrew)"
+  echo "    sudo apt install gum    # Debian/Ubuntu"
+  echo "  Without gum, claude-session falls back to numbered menus."
+fi
+
 echo ""
 echo "Done! Open a new terminal, then run:"
 echo "  claude-session --help"
